@@ -1,24 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
-import {
-  FlatList,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NativeModules } from 'react-native';
 import dgram, { RemoteInfo, Socket } from 'react-native-udp';
 import * as DocumentPicker from '@react-native-documents/picker';
+import DeviceInfo from 'react-native-device-info';
 // import RNFS from 'react-native-fs';
+import RootNavigator from './src/navigation/RootNavigator';
 
 declare global {
   var startReceiver: (port: number) => boolean;
   var startSender: (path: string, ip: string, port: number) => boolean;
   var getProgress: () => number;
   var cancelTransfer: () => void;
+  var getCurrentFileName: () => string;
+  var getCurrentFileSize: () => number;
 }
 
 const DISCOVERY_PORT = 41234;
@@ -27,10 +24,10 @@ const DISCOVER = 'SWIFTSHAREX_DISCOVER';
 const HELLO_PREFIX = 'SWIFTSHAREX_HELLO';
 const LOCK_PREFIX = 'SWIFTSHAREX_LOCK';
 const BYE_PREFIX = 'SWIFTSHAREX_BYE';
+const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
 const TRANSFER_PORT = 5001;
 
 type Role = 'send' | 'receive';
-type Screen = 'chooseRole' | 'devicePicker' | 'session';
 type DiscoveredDevice = {
   id: string;
   name: string;
@@ -47,19 +44,34 @@ type PickedFile = {
   path: string;
 };
 
+type FileTransferRecord = {
+  id: string;
+  fileName: string;
+  fileSize?: number;
+  timestamp: Date;
+  status: 'completed' | 'cancelled' | 'in-progress';
+};
+
 function App() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [moduleStatus, setModuleStatus] = useState<'found' | 'missing'>(
     'missing',
   );
-  const [screen, setScreen] = useState<Screen>('chooseRole');
   const [role, setRole] = useState<Role | null>(null);
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
   const [sessionPeer, setSessionPeer] = useState<DiscoveredDevice | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transferMode, setTransferMode] = useState<TransferMode>('idle');
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentTransferModeRef.current = transferMode;
+  }, [transferMode]);
   const [progress, setProgress] = useState<number>(0);
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const [sentFiles, setSentFiles] = useState<FileTransferRecord[]>([]);
+  const [receivedFiles, setReceivedFiles] = useState<FileTransferRecord[]>([]);
 
   const discoverySocketRef = useRef<Socket | null>(null);
   const discoveryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -67,16 +79,26 @@ function App() {
   );
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const closingDiscoveryRef = useRef<boolean>(false);
+  const currentTransferIdRef = useRef<string | null>(null);
+  const currentTransferModeRef = useRef<TransferMode>('idle');
+  const justCancelledRef = useRef<boolean>(false);
+  // const receivingFileNameRef = useRef<string>('Unknown File');
 
   const deviceId = useMemo(() => Math.random().toString(36).slice(2, 8), []);
-  const deviceName = useMemo(() => {
-    const constants = (NativeModules.PlatformConstants ?? {}) as {
-      model?: string;
-      deviceName?: string;
-    };
-    return (
-      constants.deviceName || constants.model || `SwiftShareX-${Platform.OS}`
-    );
+  const [deviceName, setDeviceName] = useState<string>(
+    `SwiftShareX-${Platform.OS}`,
+  );
+
+  // Get device name from react-native-device-info
+  useEffect(() => {
+    DeviceInfo.getDeviceName()
+      .then(name => {
+        setDeviceName(name);
+      })
+      .catch(() => {
+        // Fallback to default name if error
+        setDeviceName(`SwiftShareX-${Platform.OS}`);
+      });
   }, []);
 
   // Install JSI once
@@ -94,8 +116,9 @@ function App() {
     return () => {
       stopDiscovery();
       stopProgressPolling();
-      global.cancelTransfer?.();
+      globalThis.cancelTransfer?.();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopBroadcasting = () => {
@@ -149,6 +172,15 @@ function App() {
     sock.send(bye, 0, bye.length, DISCOVERY_PORT, targetAddr);
   };
 
+  const sendCancel = (
+    sock: Socket,
+    targetAddr: string,
+    currentSessionId: string,
+  ) => {
+    const cancel = `${CANCEL_PREFIX}|${currentSessionId}|${deviceId}`;
+    sock.send(cancel, 0, cancel.length, DISCOVERY_PORT, targetAddr);
+  };
+
   const uriToPath = (uri?: string | null) => {
     if (!uri) return '';
     return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
@@ -164,14 +196,81 @@ function App() {
   const startProgressPolling = () => {
     stopProgressPolling();
     progressTimerRef.current = setInterval(() => {
-      const p = global.getProgress?.();
+      const p = globalThis.getProgress?.();
       if (typeof p === 'number') {
         setProgress(p);
+
+        // Clear the justCancelled flag once progress is back to 0
+        if (p === 0 && justCancelledRef.current) {
+          justCancelledRef.current = false;
+        }
+
+        // If progress is happening (> 0 but < 1) and we're idle, switch to receiving
+        // But don't create a new transfer if we just cancelled (residual progress)
+        if (p > 0 && p < 1 && !justCancelledRef.current) {
+          setTransferMode(prev => {
+            if (prev === 'idle') {
+              const fileName =
+                globalThis.getCurrentFileName?.() || 'Unknown File';
+              const fileSize = globalThis.getCurrentFileSize?.() || undefined;
+              // Start tracking a new receiving transfer
+              const transferId = `recv-${Date.now()}`;
+              currentTransferIdRef.current = transferId;
+              setReceivedFiles(prevFiles => [
+                {
+                  id: transferId,
+                  fileName: fileName,
+                  fileSize: fileSize,
+                  timestamp: new Date(),
+                  status: 'in-progress',
+                },
+                ...prevFiles,
+              ]);
+              return 'receiving';
+            }
+            return prev;
+          });
+        }
+        // When transfer completes
         if (p >= 1) {
-          stopProgressPolling();
-          setTransferMode('idle');
-          setPickedFile(null);
-          setPickerError(null);
+          // Capture current mode before setTimeout
+          setTransferMode(currentMode => {
+            const wasSending = currentMode === 'sending';
+            const wasReceiving = currentMode === 'receiving';
+            const transferId = currentTransferIdRef.current;
+
+            // Small delay to show 100% before resetting
+            setTimeout(() => {
+              // Update transfer record to completed
+              if (wasSending && transferId) {
+                setSentFiles(prevFiles =>
+                  prevFiles.map(f =>
+                    f.id === transferId
+                      ? { ...f, status: 'completed' as const }
+                      : f,
+                  ),
+                );
+              } else if (wasReceiving && transferId) {
+                setReceivedFiles(prevFiles =>
+                  prevFiles.map(f =>
+                    f.id === transferId
+                      ? { ...f, status: 'completed' as const }
+                      : f,
+                  ),
+                );
+              }
+
+              setTransferMode('idle');
+              setProgress(0);
+              currentTransferIdRef.current = null;
+
+              if (wasSending) {
+                setPickedFile(null);
+                setPickerError(null);
+              }
+            }, 500);
+            return currentMode; // Don't change mode yet
+          });
         }
       }
     }, 250);
@@ -224,7 +323,6 @@ function App() {
           role: peerRole,
         });
         stopBroadcasting();
-        setScreen('session');
         setTransferMode('idle');
         setProgress(0);
         setPickedFile(null);
@@ -242,12 +340,80 @@ function App() {
         if (shouldReset) {
           terminateSession();
         }
+        return;
+      }
+
+      if (text.startsWith(CANCEL_PREFIX)) {
+        const [, incomingSessionId, peerId] = text.split('|');
+        if (peerId === deviceId) return;
+
+        // Use setState callbacks to get current values
+        setSessionId(currentSessionId => {
+          setSessionPeer(currentPeer => {
+            const shouldCancel =
+              currentSessionId === incomingSessionId ||
+              (currentPeer && currentPeer.id === peerId);
+
+            if (shouldCancel) {
+              // Peer cancelled their transfer
+              try {
+                globalThis.cancelTransfer?.();
+              } catch {}
+
+              // Set flag to prevent creating duplicate transfer entries
+              justCancelledRef.current = true;
+
+              // Mark current transfer as cancelled using ref for mode
+              const transferId = currentTransferIdRef.current;
+              const mode = currentTransferModeRef.current;
+
+              if (transferId) {
+                if (mode === 'sending') {
+                  setSentFiles(prevFiles =>
+                    prevFiles.map(f =>
+                      f.id === transferId
+                        ? { ...f, status: 'cancelled' as const }
+                        : f,
+                    ),
+                  );
+                } else if (mode === 'receiving') {
+                  setReceivedFiles(prevFiles =>
+                    prevFiles.map(f =>
+                      f.id === transferId
+                        ? { ...f, status: 'cancelled' as const }
+                        : f,
+                    ),
+                  );
+                }
+              }
+
+              stopProgressPolling();
+              setTransferMode('idle');
+              setProgress(0);
+              setPickedFile(null);
+              currentTransferIdRef.current = null;
+
+              // Restart the receiver so we can accept new transfers
+              setTimeout(() => {
+                try {
+                  const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+                  if (ok) {
+                    startProgressPolling();
+                  }
+                } catch {}
+              }, 100);
+            }
+
+            return currentPeer;
+          });
+          return currentSessionId;
+        });
+        return;
       }
     };
 
   const startDiscovery = (nextRole: Role) => {
     setRole(nextRole);
-    setScreen('devicePicker');
     setSessionPeer(null);
     setSessionId(null);
     setPickedFile(null);
@@ -279,17 +445,18 @@ function App() {
     }, 1500);
   };
 
-  const startReceiving = () => {
-    if (transferMode === 'receiving') return;
-    const ok = global.startReceiver?.(TRANSFER_PORT);
-    if (ok) {
-      if (transferMode !== 'sending') {
-        setTransferMode('receiving');
-      }
-      setProgress(0);
-      startProgressPolling();
-    }
-  };
+  // const startReceiving = () => {
+  //   if (transferMode === 'receiving') return;
+  //   const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+  //   if (ok) {
+  //     // Don't override if currently sending
+  //     if (transferMode !== 'sending') {
+  //       setTransferMode('idle');
+  //     }
+  //     setProgress(0);
+  //     startProgressPolling();
+  //   }
+  // };
 
   const pickFile = async () => {
     try {
@@ -344,6 +511,8 @@ function App() {
         path,
       });
     } catch (err: any) {
+      // Best-effort cancel detection; library types may vary
+      // @ts-ignore
       if (DocumentPicker?.isCancel?.(err)) return;
       setPickerError('Failed to pick file. Try again.');
     }
@@ -357,22 +526,91 @@ function App() {
       return;
     }
 
-    const ok = global.startSender?.(path, sessionPeer.address, TRANSFER_PORT);
+    const ok = globalThis.startSender?.(
+      path,
+      sessionPeer.address,
+      TRANSFER_PORT,
+    );
     if (ok) {
+      // Track the sending transfer
+      const transferId = `send-${Date.now()}`;
+      currentTransferIdRef.current = transferId;
+      setSentFiles(prevFiles => [
+        {
+          id: transferId,
+          fileName: pickedFile.name,
+          fileSize: pickedFile.size || undefined,
+          timestamp: new Date(),
+          status: 'in-progress',
+        },
+        ...prevFiles,
+      ]);
+
       setTransferMode('sending');
       setProgress(0);
       startProgressPolling();
     }
   };
 
-  const isSending = transferMode === 'sending';
-  const isReceiving = transferMode === 'receiving';
+  // UI state helpers now handled in SessionScreen
 
   useEffect(() => {
-    if (screen === 'session' && sessionPeer) {
-      startReceiving();
+    if (sessionPeer) {
+      // Start the receiver but keep in idle mode
+      // It will automatically switch to 'receiving' when data arrives
+      const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+      if (ok) {
+        startProgressPolling();
+      }
     }
-  }, [screen, sessionPeer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionPeer]);
+
+  const cancelOngoingTransfer = () => {
+    try {
+      globalThis.cancelTransfer?.();
+    } catch {}
+
+    // Set flag to prevent creating duplicate transfer entries
+    justCancelledRef.current = true;
+
+    // Notify peer about cancellation
+    if (discoverySocketRef.current && sessionPeer && sessionId) {
+      sendCancel(discoverySocketRef.current, sessionPeer.address, sessionId);
+    }
+
+    // Mark current transfer as cancelled
+    const transferId = currentTransferIdRef.current;
+    if (transferId && transferMode === 'sending') {
+      setSentFiles(prevFiles =>
+        prevFiles.map(f =>
+          f.id === transferId ? { ...f, status: 'cancelled' as const } : f,
+        ),
+      );
+    } else if (transferId && transferMode === 'receiving') {
+      setReceivedFiles(prevFiles =>
+        prevFiles.map(f =>
+          f.id === transferId ? { ...f, status: 'cancelled' as const } : f,
+        ),
+      );
+    }
+
+    stopProgressPolling();
+    setTransferMode('idle');
+    setProgress(0);
+    setPickedFile(null);
+    currentTransferIdRef.current = null;
+
+    // Restart the receiver so we can accept new transfers
+    setTimeout(() => {
+      try {
+        const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+        if (ok) {
+          startProgressPolling();
+        }
+      } catch {}
+    }, 100);
+  };
 
   const connectToDevice = (device: DiscoveredDevice) => {
     if (!discoverySocketRef.current || !role) return;
@@ -382,7 +620,6 @@ function App() {
     setSessionPeer(device);
     setSessionId(newSessionId);
     stopBroadcasting();
-    setScreen('session');
     setTransferMode('idle');
     setProgress(0);
     setPickedFile(null);
@@ -403,241 +640,39 @@ function App() {
     setProgress(0);
     setPickedFile(null);
     setPickerError(null);
-    global.cancelTransfer?.();
+    setSentFiles([]);
+    setReceivedFiles([]);
+    currentTransferIdRef.current = null;
+    globalThis.cancelTransfer?.();
     stopProgressPolling();
     stopDiscovery();
-    setScreen('chooseRole');
   };
 
-  const renderDevice = ({ item }: { item: DiscoveredDevice }) => (
-    <Pressable style={styles.deviceCard} onPress={() => connectToDevice(item)}>
-      <Text style={styles.deviceName}>{item.name}</Text>
-      <Text style={styles.deviceMeta}>
-        {item.address} · {item.role === 'send' ? 'Sender' : 'Receiver'}
-      </Text>
-    </Pressable>
-  );
+  // Device renderer moved into DevicePickerScreen
 
   return (
     <SafeAreaProvider>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>SwiftShareX</Text>
-          <Text style={styles.subtitle}>JSI module: {moduleStatus}</Text>
-        </View>
-
-        {screen === 'chooseRole' && (
-          <>
-            <Text style={styles.bodyText}>Pick what you want to do.</Text>
-            <Pressable
-              style={styles.button}
-              onPress={() => startDiscovery('send')}
-            >
-              <Text style={styles.buttonText}>Send</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.button}
-              onPress={() => startDiscovery('receive')}
-            >
-              <Text style={styles.buttonText}>Receive</Text>
-            </Pressable>
-          </>
-        )}
-
-        {screen === 'devicePicker' && role && (
-          <>
-            <Text style={styles.sectionTitle}>Devices nearby</Text>
-            <Text style={styles.bodyText}>Scanning on UDP · Role: {role}</Text>
-
-            <FlatList
-              data={devices}
-              keyExtractor={item => `${item.id}-${item.address}`}
-              renderItem={renderDevice}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              ListEmptyComponent={
-                <Text style={styles.bodyText}>Waiting for peers…</Text>
-              }
-              contentContainerStyle={
-                devices.length ? undefined : styles.listEmpty
-              }
-            />
-
-            <Pressable
-              style={[styles.button, styles.secondaryButton]}
-              onPress={terminateSession}
-            >
-              <Text style={styles.buttonText}>Back</Text>
-            </Pressable>
-          </>
-        )}
-
-        {screen === 'session' && sessionPeer && role && (
-          <View style={styles.sessionCard}>
-            <Text style={styles.sectionTitle}>Connection locked</Text>
-            <Text style={styles.deviceName}>{sessionPeer.name}</Text>
-            <Text style={styles.deviceMeta}>IP {sessionPeer.address}</Text>
-            <Text style={styles.deviceMeta}>
-              You are the {role === 'send' ? 'Sender' : 'Receiver'}
-            </Text>
-
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Send a file</Text>
-              <Pressable style={styles.button} onPress={pickFile}>
-                <Text style={styles.buttonText}>Pick document</Text>
-              </Pressable>
-
-              {pickedFile && (
-                <View style={styles.fileRow}>
-                  <Text style={styles.bodyText}>{pickedFile.name}</Text>
-                  {pickedFile.size != null && (
-                    <Text style={styles.deviceMeta}>
-                      {Math.round(pickedFile.size / 1024)} KB
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {pickerError && (
-                <Text style={styles.errorText}>{pickerError}</Text>
-              )}
-
-              <Pressable
-                style={[
-                  styles.button,
-                  !pickedFile || isSending ? styles.buttonDisabled : null,
-                ]}
-                onPress={sendFile}
-                disabled={!pickedFile || isSending}
-              >
-                <Text style={styles.buttonText}>
-                  {isSending ? 'Sending…' : 'Send file'}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Receive</Text>
-              <Text style={styles.bodyText}>
-                Listening on UDP port {TRANSFER_PORT}.
-              </Text>
-            </View>
-
-            {transferMode !== 'idle' && (
-              <View style={styles.cardSection}>
-                <Text style={styles.sectionTitle}>
-                  {transferMode === 'sending' ? 'Sending' : 'Receiving'}
-                </Text>
-                <Text style={styles.bodyText}>
-                  Progress: {(progress * 100).toFixed(1)}%
-                </Text>
-              </View>
-            )}
-
-            <Pressable
-              style={[styles.button, styles.terminate]}
-              onPress={terminateSession}
-            >
-              <Text style={styles.buttonText}>Terminate connection</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
+      <RootNavigator
+        role={role}
+        devices={devices}
+        sessionPeer={sessionPeer}
+        pickedFile={pickedFile}
+        pickerError={pickerError}
+        transferMode={transferMode}
+        progress={progress}
+        transferPort={TRANSFER_PORT}
+        sentFiles={sentFiles}
+        receivedFiles={receivedFiles}
+        onChooseRole={startDiscovery}
+        onSelectDevice={connectToDevice}
+        onBack={terminateSession}
+        onPickFile={pickFile}
+        onSendFile={sendFile}
+        onCancelTransfer={cancelOngoingTransfer}
+        onTerminate={terminateSession}
+      />
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    gap: 16,
-    justifyContent: 'flex-start',
-    backgroundColor: 'white',
-  },
-  header: {
-    gap: 4,
-    marginBottom: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#555',
-  },
-  bodyText: {
-    fontSize: 15,
-    color: '#222',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  cardSection: {
-    gap: 10,
-    marginTop: 10,
-  },
-  deviceCard: {
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  deviceMeta: {
-    fontSize: 13,
-    color: '#555',
-    marginTop: 4,
-  },
-  button: {
-    backgroundColor: '#111',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  secondaryButton: {
-    backgroundColor: '#444',
-    marginTop: 10,
-  },
-  terminate: {
-    backgroundColor: '#b00020',
-  },
-  separator: {
-    height: 10,
-  },
-  listEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sessionCard: {
-    gap: 8,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-  },
-  fileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  errorText: {
-    color: '#b00020',
-    marginTop: 6,
-  },
-});
 
 export default App;

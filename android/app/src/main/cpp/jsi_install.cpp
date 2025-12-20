@@ -6,60 +6,66 @@ using namespace facebook;
 using namespace swiftshare;
 
 static std::unique_ptr<TransferEngine> engine;
-static JavaVM* g_jvm = nullptr;
+static JavaVM *g_jvm = nullptr;
 static jobject g_contextRef = nullptr;
-static jclass g_resolverClass = nullptr;  // Cache the class reference
+static jclass g_resolverClass = nullptr; // Cache the class reference
 
 #include <thread>
 #include <android/log.h>
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "SwiftShare", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "SwiftShare", __VA_ARGS__)
 
-void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
+void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
+{
     // Get ReactApplicationContext from the module
     jclass moduleClass = env->GetObjectClass(moduleInstance);
     jmethodID getReactContextMethod = env->GetMethodID(
         moduleClass,
         "getReactApplicationContext",
-        "()Lcom/facebook/react/bridge/ReactApplicationContext;"
-    );
-    
+        "()Lcom/facebook/react/bridge/ReactApplicationContext;");
+
     jobject reactContext = env->CallObjectMethod(moduleInstance, getReactContextMethod);
-    if (!reactContext) {
+    if (!reactContext)
+    {
         LOGE("Failed to get ReactApplicationContext");
         return;
     }
-    
+
     // Store global reference to context
-    if (g_contextRef) {
+    if (g_contextRef)
+    {
         env->DeleteGlobalRef(g_contextRef);
     }
     g_contextRef = env->NewGlobalRef(reactContext);
     env->GetJavaVM(&g_jvm);
-    
+
     // Find and cache the FilePathResolver class with global reference
     jclass localResolverClass = env->FindClass("com/swiftsharex/FilePathResolver");
-    if (!localResolverClass) {
+    if (!localResolverClass)
+    {
         LOGE("Failed to find FilePathResolver class");
         env->ExceptionDescribe();
         env->ExceptionClear();
         return;
     }
-    
-    if (g_resolverClass) {
+
+    if (g_resolverClass)
+    {
         env->DeleteGlobalRef(g_resolverClass);
     }
     g_resolverClass = (jclass)env->NewGlobalRef(localResolverClass);
     env->DeleteLocalRef(localResolverClass);
-    
+
     LOGI("FilePathResolver class loaded successfully");
-    
+
     // Set up path resolver callback
-    if (!engine) {
+    if (!engine)
+    {
         engine = std::make_unique<TransferEngine>();
     }
-    
-    engine->setPathResolver([](const std::string& filename) -> std::string {
+
+    engine->setPathResolver([](const std::string &filename) -> std::string
+                            {
         JNIEnv* env = nullptr;
         bool attached = false;
         
@@ -135,9 +141,8 @@ void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
         }
         
         LOGI("Resolved path: %s", resultPath.empty() ? "(empty)" : resultPath.c_str());
-        return resultPath;
-    });
-    
+        return resultPath; });
+
     // JSI bindings
     runtime.global().setProperty(
         runtime,
@@ -167,10 +172,8 @@ void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
                 bool ok = engine->startReceiver(port);
 
                 return jsi::Value(ok);
-            }
-        )
-    );
-    
+            }));
+
     runtime.global().setProperty(
         runtime,
         "startSender",
@@ -178,34 +181,34 @@ void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
             runtime,
             jsi::PropNameID::forAscii(runtime, "startSender"),
             3,
-            [](jsi::Runtime& rt,
-            const jsi::Value&,
-            const jsi::Value* args,
-            size_t count) -> jsi::Value {
-
+            [](jsi::Runtime &rt,
+               const jsi::Value &,
+               const jsi::Value *args,
+               size_t count) -> jsi::Value
+            {
                 if (count < 3 ||
                     !args[0].isString() ||
                     !args[1].isString() ||
-                    !args[2].isNumber()) {
+                    !args[2].isNumber())
+                {
                     LOGE("startSender: invalid arguments");
                     return jsi::Value(false);
                 }
 
-                if (!engine) {
+                if (!engine)
+                {
                     engine = std::make_unique<TransferEngine>();
                 }
 
                 std::string path = args[0].asString(rt).utf8(rt);
-                std::string ip   = args[1].asString(rt).utf8(rt);
-                uint16_t port    = static_cast<uint16_t>(args[2].asNumber());
+                std::string ip = args[1].asString(rt).utf8(rt);
+                uint16_t port = static_cast<uint16_t>(args[2].asNumber());
 
                 LOGI("Starting sender: %s -> %s:%d", path.c_str(), ip.c_str(), port);
                 bool ok = engine->startSender(path, ip, port);
                 return jsi::Value(ok);
-            }
-        )
-    );
-    
+            }));
+
     runtime.global().setProperty(
         runtime,
         "getProgress",
@@ -213,20 +216,19 @@ void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
             runtime,
             jsi::PropNameID::forAscii(runtime, "getProgress"),
             0,
-            [](jsi::Runtime&,
-            const jsi::Value&,
-            const jsi::Value*,
-            size_t) -> jsi::Value {
-
-                if (!engine) {
+            [](jsi::Runtime &,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (!engine)
+                {
                     return jsi::Value(0.0);
                 }
 
                 return jsi::Value(engine->getProgress());
-            }
-        )
-    );
-    
+            }));
+
     runtime.global().setProperty(
         runtime,
         "cancelTransfer",
@@ -234,21 +236,61 @@ void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance) {
             runtime,
             jsi::PropNameID::forAscii(runtime, "cancelTransfer"),
             0,
-            [](jsi::Runtime&,
-            const jsi::Value&,
-            const jsi::Value*,
-            size_t) -> jsi::Value {
-
-                if (engine) {
+            [](jsi::Runtime &,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (engine)
+                {
                     LOGI("Cancelling transfer");
                     engine->cancel();
                 }
 
                 return jsi::Value::undefined();
-            }
-        )
-    );
-    
-    
+            }));
+
+    runtime.global().setProperty(
+        runtime,
+        "getCurrentFileName",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "getCurrentFileName"),
+            0,
+            [](jsi::Runtime &rt,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (!engine)
+                {
+                    return jsi::Value(jsi::String::createFromUtf8(rt, ""));
+                }
+
+                std::string fileName = engine->getCurrentFileName();
+                return jsi::Value(jsi::String::createFromUtf8(rt, fileName));
+            }));
+
+    runtime.global().setProperty(
+        runtime,
+        "getCurrentFileSize",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "getCurrentFileSize"),
+            0,
+            [](jsi::Runtime &,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (!engine)
+                {
+                    return jsi::Value(0);
+                }
+
+                uint64_t fileSize = engine->getCurrentFileSize();
+                return jsi::Value(static_cast<double>(fileSize));
+            }));
+
     LOGI("JSI installation complete");
 }

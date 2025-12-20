@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 
 namespace swiftshare
 {
@@ -25,6 +26,8 @@ namespace swiftshare
 
         double getProgress() const;
         void cancel();
+        std::string getCurrentFileName() const;
+        uint64_t getCurrentFileSize() const;
 
     private:
         void receiverThread(uint16_t port);
@@ -37,6 +40,9 @@ namespace swiftshare
         std::atomic<bool> cancelled_;
         std::atomic<bool> receiving_;
         PathResolverCallback pathResolver_;
+        mutable std::mutex fileInfoMutex_;
+        std::string currentFileName_;
+        uint64_t currentFileSize_;
     };
 
 } // namespace swiftshare

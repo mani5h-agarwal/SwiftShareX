@@ -24,7 +24,9 @@ TransferEngine::TransferEngine()
       totalBytes_(0),
       cancelled_(false),
       receiving_(false),
-      pathResolver_(nullptr) {}
+      pathResolver_(nullptr),
+      currentFileName_(""),
+      currentFileSize_(0) {}
 
 TransferEngine::~TransferEngine()
 {
@@ -157,6 +159,13 @@ void TransferEngine::receiverThread(uint16_t port)
 
         LOGI("Saving to: %s", outPath.c_str());
 
+        // Store current file info
+        {
+            std::lock_guard<std::mutex> lock(fileInfoMutex_);
+            currentFileName_ = filename;
+            currentFileSize_ = meta.fileSize;
+        }
+
         int fd = open(outPath.c_str(), O_CREAT | O_WRONLY, 0644);
         if (fd < 0)
         {
@@ -210,9 +219,18 @@ void TransferEngine::receiverThread(uint16_t port)
         close(fd);
         close(client);
 
-        // Reset progress counters between files to reflect idle state
+        // Don't reset immediately - let JS detect completion (progress = 1.0)
+        // Wait briefly, then reset for next transfer
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         bytesTransferred_ = 0;
         totalBytes_ = 0;
+
+        // Clear file info
+        {
+            std::lock_guard<std::mutex> lock(fileInfoMutex_);
+            currentFileName_.clear();
+            currentFileSize_ = 0;
+        }
     }
 
     close(server);
@@ -364,4 +382,21 @@ void TransferEngine::senderThread(const std::string &filePath,
 
     close(sock);
     close(fd);
+
+    // Wait briefly to let JS detect completion (progress = 1.0) before resetting
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    bytesTransferred_ = 0;
+    totalBytes_ = 0;
+}
+
+std::string TransferEngine::getCurrentFileName() const
+{
+    std::lock_guard<std::mutex> lock(fileInfoMutex_);
+    return currentFileName_;
+}
+
+uint64_t TransferEngine::getCurrentFileSize() const
+{
+    std::lock_guard<std::mutex> lock(fileInfoMutex_);
+    return currentFileSize_;
 }
