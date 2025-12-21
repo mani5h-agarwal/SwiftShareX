@@ -6,7 +6,7 @@ import { NativeModules } from 'react-native';
 import dgram, { RemoteInfo, Socket } from 'react-native-udp';
 import * as DocumentPicker from '@react-native-documents/picker';
 import DeviceInfo from 'react-native-device-info';
-// import RNFS from 'react-native-fs';
+import RNFS from 'react-native-fs';
 import RootNavigator from './src/navigation/RootNavigator';
 
 declare global {
@@ -82,6 +82,7 @@ function App() {
   const currentTransferIdRef = useRef<string | null>(null);
   const currentTransferModeRef = useRef<TransferMode>('idle');
   const justCancelledRef = useRef<boolean>(false);
+  const localCopyPathRef = useRef<string | null>(null);
   // const receivingFileNameRef = useRef<string>('Unknown File');
 
   const deviceId = useMemo(() => Math.random().toString(36).slice(2, 8), []);
@@ -117,6 +118,7 @@ function App() {
       stopDiscovery();
       stopProgressPolling();
       globalThis.cancelTransfer?.();
+      cleanupLocalCopy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -186,6 +188,21 @@ function App() {
     return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
   };
 
+  const cleanupLocalCopy = async (path?: string | null) => {
+    const target = path ?? localCopyPathRef.current;
+    if (!target) return;
+
+    if (localCopyPathRef.current === target) {
+      localCopyPathRef.current = null;
+    }
+
+    try {
+      await RNFS.unlink(target);
+    } catch {
+      // Swallow errors: cache files may already be gone.
+    }
+  };
+
   const stopProgressPolling = () => {
     if (progressTimerRef.current) {
       clearInterval(progressTimerRef.current);
@@ -238,6 +255,7 @@ function App() {
             const wasSending = currentMode === 'sending';
             const wasReceiving = currentMode === 'receiving';
             const transferId = currentTransferIdRef.current;
+            const finishedSendPath = localCopyPathRef.current;
 
             // Small delay to show 100% before resetting
             setTimeout(() => {
@@ -263,6 +281,7 @@ function App() {
               setTransferMode('idle');
               setProgress(0);
               currentTransferIdRef.current = null;
+              cleanupLocalCopy(finishedSendPath);
 
               if (wasSending) {
                 setPickedFile(null);
@@ -392,6 +411,7 @@ function App() {
               setProgress(0);
               setPickedFile(null);
               currentTransferIdRef.current = null;
+              cleanupLocalCopy();
 
               // Restart the receiver so we can accept new transfers
               setTimeout(() => {
@@ -461,6 +481,7 @@ function App() {
   const pickFile = async () => {
     try {
       setPickerError(null);
+      await cleanupLocalCopy();
 
       // Pick the file
       const picker = DocumentPicker.pickSingle
@@ -504,6 +525,7 @@ function App() {
 
       const path = uriToPath(copyResult.localUri);
       setPickerError(null);
+      localCopyPathRef.current = path;
       setPickedFile({
         name: res.name ?? 'file',
         uri: res.uri,
@@ -600,6 +622,7 @@ function App() {
     setProgress(0);
     setPickedFile(null);
     currentTransferIdRef.current = null;
+    cleanupLocalCopy();
 
     // Restart the receiver so we can accept new transfers
     setTimeout(() => {
@@ -643,6 +666,7 @@ function App() {
     setSentFiles([]);
     setReceivedFiles([]);
     currentTransferIdRef.current = null;
+    cleanupLocalCopy();
     globalThis.cancelTransfer?.();
     stopProgressPolling();
     stopDiscovery();

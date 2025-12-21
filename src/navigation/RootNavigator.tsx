@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   createStackNavigator,
-  // CardStyleInterpolators,
+  CardStyleInterpolators,
 } from '@react-navigation/stack';
 import ChooseRoleScreen from '../screens/ChooseRoleScreen';
 import DevicePickerScreen from '../screens/DevicePickerScreen';
@@ -92,7 +92,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          //   cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+            cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
         }}
       >
         {!role ? (

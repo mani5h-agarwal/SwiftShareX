@@ -90,11 +90,7 @@ const DeviceCard: React.FC<{
             </Text>
           </View>
         </View>
-
-        {/* Arrow indicator */}
-        <View style={styles.arrowContainer}>
-          <Text style={styles.arrowText}>→</Text>
-        </View>
+        <Text style={styles.arrow}>›</Text>
       </Pressable>
     </Animated.View>
   );
@@ -102,7 +98,7 @@ const DeviceCard: React.FC<{
 
 const styles = StyleSheet.create({
   deviceCardWrapper: {
-    marginVertical: 6,
+    marginVertical: 8,
   },
   deviceCard: {
     flexDirection: 'row',
@@ -111,21 +107,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     gap: 14,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   statusDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     position: 'absolute',
-    top: 16,
-    left: 16,
+    top: 18,
+    left: 18,
   },
   deviceIcon: {
     width: 56,
@@ -171,17 +162,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  arrowContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowText: {
-    fontSize: 18,
-    color: '#6B7280',
+  arrow: {
+    fontSize: 28,
+    color: '#04000a3a',
+    fontWeight: '400',
+    marginRight: 8,
   },
 });
 

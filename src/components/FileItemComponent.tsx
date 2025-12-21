@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import ProgressBar from './ProgressBar';
+import { formatFileSize, formatTime, getFileExtension } from '../utils/fileUtils'
 
 type FileTransferRecord = {
   id: string;
@@ -22,7 +23,6 @@ const FileItemComponent = ({
   index: number;
 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
   const isInProgress = file.status === 'in-progress';
@@ -45,14 +45,8 @@ const FileItemComponent = ({
         delay: index * 80,
         useNativeDriver: true,
       }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        delay: index * 80,
-        useNativeDriver: true,
-      }),
     ]).start();
-  }, [fadeAnim, slideAnim, index]);
+  }, [fadeAnim, index]);
 
   const handlePressIn = () => {
     Animated.spring(scale, {
@@ -69,35 +63,13 @@ const FileItemComponent = ({
     }).start();
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return 'Unknown';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024)
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  };
-
-  const formatTime = (timestamp: Date) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getFileExtension = (filename: string) => {
-    const parts = filename.split('.');
-    return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : 'FILE';
-  };
-
   return (
     <Animated.View
       style={[
         styles.fileCardWrapper,
         {
           opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }, { scale }],
+          transform: [{ scale }],
         },
       ]}
     >
@@ -191,7 +163,7 @@ const FileItemComponent = ({
 
 const styles = StyleSheet.create({
   fileCardWrapper: {
-    marginBottom: 12,
+    // marginBottom: 12,
   },
   fileCard: {
     flexDirection: 'row',
@@ -204,11 +176,6 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     position: 'relative',
     overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
   },
   statusBar: {
     position: 'absolute',

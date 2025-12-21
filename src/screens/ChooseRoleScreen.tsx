@@ -1,16 +1,91 @@
 import React from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  Linking,
+  Platform,
+  Alert,
+} from 'react-native';
 import RoleButton from '../components/RoleButton';
+import RNFS from 'react-native-fs';
+import { ActionRow } from '../components/ActionRow';
+
 
 type Props = {
   onChoose: (role: 'send' | 'receive') => void;
 };
 
 const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
+  const openSwiftShareXFolder = async () => {
+    try {
+      // Get the SwiftShareX folder path
+      const swiftShareXPath = Platform.select({
+        android: `${RNFS.DownloadDirectoryPath}/SwiftShareX`,
+        ios: `${RNFS.DocumentDirectoryPath}/SwiftShareX`,
+      });
+
+      if (!swiftShareXPath) {
+        Alert.alert('Error', 'Could not determine SwiftShareX folder location');
+        return;
+      }
+
+      // Check if folder exists
+      const exists = await RNFS.exists(swiftShareXPath);
+
+      if (!exists) {
+        Alert.alert(
+          'No Files Yet',
+          "You haven't received any files yet. The SwiftShareX folder will be created when you receive your first file.",
+          [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      // Try to open the folder in file manager
+      if (Platform.OS === 'android') {
+        // For Android, try to open the Downloads/SwiftShareX folder
+        const uri =
+          'content://com.android.externalstorage.documents/document/primary%3ADownload%2FSwiftShareX';
+
+        try {
+          const canOpen = await Linking.canOpenURL(uri);
+          if (canOpen) {
+            await Linking.openURL(uri);
+          } else {
+            // Fallback: try opening just Downloads folder
+            await Linking.openURL(
+              'content://com.android.externalstorage.documents/document/primary%3ADownload',
+            );
+          }
+        } catch {
+          // If all fails, show message
+          Alert.alert(
+            'Open File Manager',
+            `Files are saved in: Downloads/SwiftShareX\n\nPlease open your file manager and navigate to this folder.`,
+            [{ text: 'OK' }],
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error opening folder:', error);
+      Alert.alert(
+        'Files Location',
+        `Received files are saved in:\n${
+          Platform.OS === 'android'
+            ? 'Downloads/SwiftShareX'
+            : 'Files/SwiftShareX'
+        }`,
+        [{ text: 'OK' }],
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#FAFBFC" barStyle="dark-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>SwiftShareX</Text>
@@ -20,11 +95,16 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
       {/* Main Content */}
       <View style={styles.content}>
         <Text style={styles.prompt}>Choose your action</Text>
-        
         <View style={styles.buttonsContainer}>
           <RoleButton role="send" onPress={() => onChoose('send')} />
           <RoleButton role="receive" onPress={() => onChoose('receive')} />
         </View>
+        <ActionRow
+          icon="🗂️"
+          title="View All Files"
+          subtitle="Saved in SwiftShareX folder"
+          onPress={openSwiftShareXFolder}
+        />
       </View>
 
       {/* Footer */}
@@ -72,10 +152,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -60,
+    marginTop: -40,
   },
   prompt: {
     fontSize: 20,
@@ -89,8 +169,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 16,
-    paddingHorizontal: 8,
+    marginBottom: 30,
   },
+
   footer: {
     paddingHorizontal: 32,
     paddingBottom: 40,

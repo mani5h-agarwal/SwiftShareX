@@ -44,7 +44,14 @@ const DevicePickerScreen: React.FC<Props> = ({
   }: {
     item: DiscoveredDevice;
     index: number;
-  }) => <DeviceCard item={item} onPress={() => onSelect(item)} index={index} isSending={isSending} />;
+  }) => (
+    <DeviceCard
+      item={item}
+      onPress={() => onSelect(item)}
+      index={index}
+      isSending={isSending}
+    />
+  );
 
   return (
     <View style={styles.container}>
@@ -52,18 +59,15 @@ const DevicePickerScreen: React.FC<Props> = ({
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Select Device</Text>
-            <View style={styles.roleIndicator}>
-              <View style={[styles.roleDot, { backgroundColor: roleColor }]} />
-              <Text style={styles.subtitle}>
-                You're {isSending ? 'sending' : 'receiving'} files
-              </Text>
-            </View>
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>Select Device</Text>
+          <View style={styles.roleIndicator}>
+            <View style={[styles.roleDot, { backgroundColor: roleColor }]} />
+            <Text style={styles.subtitle}>
+              You're {isSending ? 'sending' : 'receiving'} files
+            </Text>
           </View>
         </View>
-
         {/* Current Device Info - Redesigned */}
         {!isLoading && (
           <View style={styles.currentDeviceCard}>
@@ -86,7 +90,6 @@ const DevicePickerScreen: React.FC<Props> = ({
                   {
                     flexDirection: 'row',
                     alignItems: 'center',
-                    // justifyContent: 'space-between',
                     marginBottom: 4,
                     gap: 10,
                   },
@@ -102,10 +105,6 @@ const DevicePickerScreen: React.FC<Props> = ({
               <Text style={styles.deviceInfoName} numberOfLines={1}>
                 {deviceName}
               </Text>
-              {/* <View style={styles.ipContainer}>
-                  <View style={styles.ipDot} />
-                  <Text style={styles.deviceInfoIp}>{ipAddress}</Text>
-                </View> */}
             </View>
           </View>
         )}
@@ -145,7 +144,8 @@ const DevicePickerScreen: React.FC<Props> = ({
           ]}
           onPress={onBack}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.arrow}>‹</Text>
+          <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
       </View>
     </View>
@@ -158,16 +158,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFBFC',
   },
   header: {
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    paddingBottom: 0,
     backgroundColor: '#FAFBFC',
   },
-  headerTop: {
-    marginBottom: 20,
-  },
-  titleContainer: {
-    flex: 1,
+  headerContainer: {
+    marginBottom: 8,
   },
   title: {
     fontSize: 32,
@@ -196,23 +193,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#fff',
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 20,
     marginVertical: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
     alignItems: 'center',
   },
   deviceIconContainer: {
     marginRight: 14,
   },
   deviceIcon: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
@@ -230,7 +222,6 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    // marginBottom: 4,
   },
   deviceInfoName: {
     fontSize: 17,
@@ -261,7 +252,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
@@ -272,7 +263,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
   },
   listContent: {
     paddingTop: 8,
@@ -286,14 +277,17 @@ const styles = StyleSheet.create({
     height: 4,
   },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingBottom: 32,
     paddingTop: 16,
     backgroundColor: '#FAFBFC',
   },
   backButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     borderRadius: 16,
     alignItems: 'center',
     borderWidth: 2,
@@ -308,6 +302,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  arrow: {
+    fontSize: 28,
+    color: '#04000a3a',
+    fontWeight: '400',
+    marginRight: 8,
+    marginBottom: 4,
   },
 });
 

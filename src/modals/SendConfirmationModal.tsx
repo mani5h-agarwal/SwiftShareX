@@ -7,6 +7,7 @@ import {
   Animated,
   StyleSheet,
 } from 'react-native';
+import { formatFileSize, getFileExtension } from '../utils/fileUtils';
 
 type PickedFile = {
   name: string;
@@ -42,24 +43,9 @@ const SendConfirmationModal = ({
         useNativeDriver: true,
       }).start();
     }
-  }
-  , [visible, fadeAnim]);
+  }, [visible, fadeAnim]);
 
   if (!file) return null;
-
-  const formatFileSize = (bytes?: number | null) => {
-    if (!bytes) return 'Unknown size';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024)
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  };
-
-  const getFileExtension = (filename: string) => {
-    const parts = filename.split('.');
-    return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : 'FILE';
-  };
 
   return (
     <Modal
@@ -110,7 +96,11 @@ const SendConfirmationModal = ({
           </View>
 
           <View style={styles.fileDetails}>
-            <Text style={styles.fileName} numberOfLines={2}>
+            <Text
+              style={styles.fileName}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {file.name}
             </Text>
             <View style={styles.fileMetaContainer}>
@@ -175,36 +165,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    elevation: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    paddingTop: 24,
+    padding: 20,
     zIndex: 10,
-  },
-  iconBackground: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#804DCC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    borderWidth: 4,
-    borderColor: '#804DCC',
-  },
-  iconEmoji: {
-    fontSize: 36,
   },
   headerText: {
     flex: 1,
@@ -240,7 +208,7 @@ const styles = StyleSheet.create({
   },
   filePreviewCard: {
     flexDirection: 'row',
-    marginHorizontal: 24,
+    marginHorizontal: 16,
     marginBottom: 24,
     padding: 20,
     backgroundColor: '#FAFBFC',
@@ -248,18 +216,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#E5E7EB',
     gap: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
   },
   fileIconWrapper: {
     position: 'relative',
   },
   fileIconBackground: {
-    width: 80,
-    height: 80,
+    width: 70,
+    height: 70,
     borderRadius: 20,
     backgroundColor: 'white',
     borderWidth: 2,
@@ -268,15 +231,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   fileIcon: {
-    fontSize: 40,
+    fontSize: 32,
   },
   extensionBadge: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: -10,
+    right: -10,
     backgroundColor: '#FF6B6B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 3,
     borderColor: 'white',
@@ -354,7 +317,7 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingBottom: 32,
   },
   button: {
@@ -363,11 +326,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   cancelButton: {
     backgroundColor: '#F3F4F6',
@@ -412,8 +370,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   iconContainer: {
-    width: 72,
-    height: 72,
+    width: 66,
+    height: 66,
     backgroundColor: 'rgba(255, 24, 24, 0.11)',
     borderRadius: 48,
     marginRight: 16,

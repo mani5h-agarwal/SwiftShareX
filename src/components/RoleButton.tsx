@@ -17,7 +17,7 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
 
   const handlePressIn = () => {
     Animated.spring(scale, {
-      toValue: 0.96,
+      toValue: 0.9,
       useNativeDriver: true,
     }).start();
   };
@@ -25,7 +25,7 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
   const handlePressOut = () => {
     Animated.spring(scale, {
       toValue: 1,
-      friction: 3,
+      friction: 1,
       useNativeDriver: true,
     }).start();
   };
@@ -73,20 +73,12 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
 const styles = StyleSheet.create({
   buttonWrapper: {
     flex: 1,
-    maxWidth: 165,
   },
   button: {
     height: 200,
     borderRadius: 28,
     overflow: 'hidden',
     elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
   },
   gradientButton: {
     flex: 1,

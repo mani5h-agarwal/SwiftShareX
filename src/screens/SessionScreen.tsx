@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
 import SendConfirmationModal from '../modals/SendConfirmationModal';
+import { ActionRow } from '../components/ActionRow';
+import TabBar, { TabItem } from '../components/TabBar';
 
 type Role = 'send' | 'receive';
 
@@ -184,88 +186,25 @@ const SessionScreen: React.FC<Props> = ({
         <View style={styles.decorativeCircle2} />
       </View>
 
-      {/* Modern Tab Bar */}
-      <View style={styles.tabBar}>
-        <Pressable
-          style={[styles.tab, activeTab === 'send' && styles.tabActive]}
-          onPress={() => setActiveTab('send')}
-        >
-          <View style={styles.tabContent}>
-            <Text
-              style={[
-                styles.tabIcon,
-                activeTab === 'send' && styles.tabIconActive,
-              ]}
-            >
-              ↑
-            </Text>
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'send' && styles.tabTextActive,
-              ]}
-            >
-              Send
-            </Text>
-            <View
-              style={[
-                styles.tabBadge,
-                activeTab === 'send' && styles.tabBadgeActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabBadgeText,
-                  activeTab === 'send' && styles.tabBadgeTextActive,
-                ]}
-              >
-                {sentFiles.length}
-              </Text>
-            </View>
-          </View>
-          {activeTab === 'send' && <View style={styles.tabIndicator} />}
-        </Pressable>
-
-        <Pressable
-          style={[styles.tab, activeTab === 'receive' && styles.tabActive]}
-          onPress={() => setActiveTab('receive')}
-        >
-          <View style={styles.tabContent}>
-            <Text
-              style={[
-                styles.tabIcon,
-                activeTab === 'receive' && styles.tabIconActive,
-              ]}
-            >
-              ↓
-            </Text>
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'receive' && styles.tabTextActive,
-              ]}
-            >
-              Receive
-            </Text>
-            <View
-              style={[
-                styles.tabBadge,
-                activeTab === 'receive' && styles.tabBadgeActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabBadgeText,
-                  activeTab === 'receive' && styles.tabBadgeTextActive,
-                ]}
-              >
-                {receivedFiles.length}
-              </Text>
-            </View>
-          </View>
-          {activeTab === 'receive' && <View style={styles.tabIndicator} />}
-        </Pressable>
-      </View>
+      {/* Modern Tab Bar (Reusable) */}
+      <TabBar
+        items={[
+          {
+            key: 'send',
+            label: 'Send',
+            icon: '↑',
+            badgeCount: sentFiles.length,
+          } as TabItem,
+          {
+            key: 'receive',
+            label: 'Receive',
+            icon: '↓',
+            badgeCount: receivedFiles.length,
+          } as TabItem,
+        ]}
+        activeKey={activeTab}
+        onChange={(key: string) => setActiveTab(key as 'send' | 'receive')}
+      />
 
       {/* Content Area */}
       <ScrollView
@@ -286,43 +225,18 @@ const SessionScreen: React.FC<Props> = ({
                   </View>
                 )}
               </View>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.pickButton,
-                  transferMode === 'sending' && styles.pickButtonDisabled,
-                  pressed && !transferMode && styles.pickButtonPressed,
-                ]}
+              <ActionRow
+                icon="📄"
+                title={
+                  transferMode === 'sending' ? 'Sending...' : 'Select Document'
+                }
+                subtitle={
+                  transferMode === 'sending'
+                    ? 'Transfer in progress'
+                    : 'Choose a file to share'
+                }
                 onPress={onPickFile}
-                disabled={transferMode === 'sending'}
-              >
-                <View style={styles.pickButtonGradient}>
-                  <View style={styles.pickButtonContent}>
-                    <View style={styles.pickButtonIcon}>
-                      {transferMode === 'sending' ? (
-                        <View style={styles.spinner} />
-                      ) : (
-                        <Text style={styles.pickButtonIconText}>📄</Text>
-                      )}
-                    </View>
-                    <View style={styles.pickButtonTextContainer}>
-                      <Text style={styles.pickButtonTitle}>
-                        {transferMode === 'sending'
-                          ? 'Sending...'
-                          : 'Select Document'}
-                      </Text>
-                      <Text style={styles.pickButtonSubtitle}>
-                        {transferMode === 'sending'
-                          ? 'Transfer in progress'
-                          : 'Choose a file to share'}
-                      </Text>
-                    </View>
-                    {transferMode !== 'sending' && (
-                      <Text style={styles.pickButtonArrow}>→</Text>
-                    )}
-                  </View>
-                </View>
-              </Pressable>
+              />
             </View>
 
             {/* Transfer History */}
@@ -510,83 +424,22 @@ const styles = StyleSheet.create({
     bottom: -30,
     left: -20,
   },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tab: {
-    flex: 1,
-    position: 'relative',
-  },
-  tabContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  tabIcon: {
-    fontSize: 20,
-    color: '#9CA3AF',
-  },
-  tabIconActive: {
-    color: '#804DCC',
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-  tabTextActive: {
-    color: '#1F2937',
-  },
-  tabBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 24,
-  },
-  tabBadgeActive: {
-    backgroundColor: '#804DCC',
-  },
-  tabBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  tabBadgeTextActive: {
-    color: 'white',
-  },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: '#804DCC',
-    borderRadius: 2,
-  },
-  tabActive: {
-    // No additional styles needed, handled by tabIndicator
-  },
   content: {
     flex: 1,
   },
   contentInner: {
-    padding: 24,
-    gap: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    gap: 18,
   },
   section: {
-    gap: 16,
+    gap: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingBottom: 6,
   },
   sectionTitle: {
     fontSize: 20,
@@ -626,72 +479,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  pickButton: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#804DCC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  pickButtonDisabled: {
-    opacity: 0.6,
-  },
-  pickButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  pickButtonGradient: {
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    padding: 20,
-  },
-  pickButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  pickButtonIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: '#804DCC15',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  spinner: {
-    width: 32,
-    height: 32,
-    borderWidth: 3,
-    borderColor: '#E5E7EB',
-    borderTopColor: '#804DCC',
-    borderRadius: 16,
-  },
-  pickButtonIconText: {
-    fontSize: 32,
-  },
-  pickButtonTextContainer: {
-    flex: 1,
-  },
-  pickButtonTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  pickButtonSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  pickButtonArrow: {
-    fontSize: 24,
-    color: '#804DCC',
-    fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',
