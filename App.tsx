@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
-import { Platform } from 'react-native';
+import { Alert, NativeModules, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NativeModules } from 'react-native';
 import dgram, { RemoteInfo, Socket } from 'react-native-udp';
 import * as DocumentPicker from '@react-native-documents/picker';
 import DeviceInfo from 'react-native-device-info';
@@ -26,6 +25,7 @@ const LOCK_PREFIX = 'SWIFTSHAREX_LOCK';
 const BYE_PREFIX = 'SWIFTSHAREX_BYE';
 const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
 const TRANSFER_PORT = 5001;
+const SEND_START_TIMEOUT_MS = 8000;
 
 type Role = 'send' | 'receive';
 type DiscoveredDevice = {
@@ -78,9 +78,13 @@ function App() {
     null,
   );
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sendStartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const closingDiscoveryRef = useRef<boolean>(false);
   const currentTransferIdRef = useRef<string | null>(null);
   const currentTransferModeRef = useRef<TransferMode>('idle');
+  const progressRef = useRef<number>(0);
   const justCancelledRef = useRef<boolean>(false);
   const localCopyPathRef = useRef<string | null>(null);
   // const receivingFileNameRef = useRef<string>('Unknown File');
@@ -210,12 +214,25 @@ function App() {
     }
   };
 
+  const clearSendStartTimeout = () => {
+    if (sendStartTimeoutRef.current) {
+      clearTimeout(sendStartTimeoutRef.current);
+      sendStartTimeoutRef.current = null;
+    }
+  };
+
   const startProgressPolling = () => {
     stopProgressPolling();
     progressTimerRef.current = setInterval(() => {
       const p = globalThis.getProgress?.();
       if (typeof p === 'number') {
         setProgress(p);
+        progressRef.current = p;
+
+        // Transfer started moving, so we can clear the startup timeout
+        if (p > 0) {
+          clearSendStartTimeout();
+        }
 
         // Clear the justCancelled flag once progress is back to 0
         if (p === 0 && justCancelledRef.current) {
@@ -280,6 +297,7 @@ function App() {
 
               setTransferMode('idle');
               setProgress(0);
+              progressRef.current = 0;
               currentTransferIdRef.current = null;
               cleanupLocalCopy(finishedSendPath);
 
@@ -288,6 +306,7 @@ function App() {
                 setPickerError(null);
               }
             }, 500);
+            clearSendStartTimeout();
             return currentMode; // Don't change mode yet
           });
         }
@@ -540,6 +559,29 @@ function App() {
     }
   };
 
+  const handleSendFailure = (message: string) => {
+    clearSendStartTimeout();
+    try {
+      globalThis.cancelTransfer?.();
+    } catch {}
+
+    stopProgressPolling();
+
+    const transferId = currentTransferIdRef.current;
+    if (transferId) {
+      setSentFiles(prevFiles => prevFiles.filter(f => f.id !== transferId));
+    }
+
+    currentTransferIdRef.current = null;
+    setTransferMode('idle');
+    setProgress(0);
+    progressRef.current = 0;
+    setPickedFile(null);
+    setPickerError(message);
+    cleanupLocalCopy();
+    Alert.alert('Send failed', message);
+  };
+
   const sendFile = () => {
     if (!sessionPeer || !pickedFile) return;
     const path = pickedFile.path;
@@ -548,30 +590,48 @@ function App() {
       return;
     }
 
+    clearSendStartTimeout();
+
     const ok = globalThis.startSender?.(
       path,
       sessionPeer.address,
       TRANSFER_PORT,
     );
-    if (ok) {
-      // Track the sending transfer
-      const transferId = `send-${Date.now()}`;
-      currentTransferIdRef.current = transferId;
-      setSentFiles(prevFiles => [
-        {
-          id: transferId,
-          fileName: pickedFile.name,
-          fileSize: pickedFile.size || undefined,
-          timestamp: new Date(),
-          status: 'in-progress',
-        },
-        ...prevFiles,
-      ]);
-
-      setTransferMode('sending');
-      setProgress(0);
-      startProgressPolling();
+    if (!ok) {
+      handleSendFailure('Could not start the transfer. Please try again.');
+      return;
     }
+
+    // Track the sending transfer
+    const transferId = `send-${Date.now()}`;
+    currentTransferIdRef.current = transferId;
+    setSentFiles(prevFiles => [
+      {
+        id: transferId,
+        fileName: pickedFile.name,
+        fileSize: pickedFile.size || undefined,
+        timestamp: new Date(),
+        status: 'in-progress',
+      },
+      ...prevFiles,
+    ]);
+
+    setTransferMode('sending');
+    setProgress(0);
+    progressRef.current = 0;
+    startProgressPolling();
+
+    // Failsafe: if progress never advances, time out and reset state so the user can retry.
+    sendStartTimeoutRef.current = setTimeout(() => {
+      if (
+        currentTransferModeRef.current === 'sending' &&
+        (progressRef.current ?? 0) < 0.01
+      ) {
+        handleSendFailure(
+          'Transfer did not start in time. Please ensure the peer is reachable and retry.',
+        );
+      }
+    }, SEND_START_TIMEOUT_MS);
   };
 
   // UI state helpers now handled in SessionScreen
@@ -592,6 +652,8 @@ function App() {
     try {
       globalThis.cancelTransfer?.();
     } catch {}
+
+    clearSendStartTimeout();
 
     // Set flag to prevent creating duplicate transfer entries
     justCancelledRef.current = true;
@@ -620,6 +682,7 @@ function App() {
     stopProgressPolling();
     setTransferMode('idle');
     setProgress(0);
+    progressRef.current = 0;
     setPickedFile(null);
     currentTransferIdRef.current = null;
     cleanupLocalCopy();
@@ -652,6 +715,8 @@ function App() {
   };
 
   const terminateSession = () => {
+    clearSendStartTimeout();
+
     if (discoverySocketRef.current && sessionPeer && sessionId) {
       sendBye(discoverySocketRef.current, sessionPeer.address, sessionId);
     }

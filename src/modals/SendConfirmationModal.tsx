@@ -1,12 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  Pressable,
-  Animated,
-  StyleSheet,
-} from 'react-native';
+import React from 'react';
+import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
 import { formatFileSize, getFileExtension } from '../utils/fileUtils';
 
 type PickedFile = {
@@ -27,24 +20,6 @@ const SendConfirmationModal = ({
   onConfirm: () => void;
   onCancel: () => void;
 }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, fadeAnim]);
-
   if (!file) return null;
 
   return (
@@ -54,11 +29,10 @@ const SendConfirmationModal = ({
       animationType="slide"
       onRequestClose={onCancel}
       statusBarTranslucent
+      hardwareAccelerated
     >
       <Pressable style={styles.overlay} onPress={onCancel}>
-        <Animated.View
-          style={[styles.overlayBackground, { opacity: fadeAnim }]}
-        />
+        <View style={styles.overlayBackground} />
       </Pressable>
 
       <View style={styles.modalContainer}>

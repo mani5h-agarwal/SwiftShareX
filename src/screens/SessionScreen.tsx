@@ -9,6 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
+import EmptyState from '../components/EmptyState';
 import SendConfirmationModal from '../modals/SendConfirmationModal';
 import { ActionRow } from '../components/ActionRow';
 import TabBar, { TabItem } from '../components/TabBar';
@@ -68,7 +69,7 @@ const SessionScreen: React.FC<Props> = ({
   onCancelTransfer,
   onTerminate,
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'receive'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'receive'>(_role);
   const [showSendModal, setShowSendModal] = useState(false);
   const [currentTransferId, setCurrentTransferId] = useState<string | null>(
     null,
@@ -218,22 +219,48 @@ const SessionScreen: React.FC<Props> = ({
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Send Files</Text>
-                {transferMode !== 'sending' && (
-                  <View style={styles.readyBadge}>
-                    <View style={styles.readyDot} />
-                    <Text style={styles.readyText}>Ready</Text>
-                  </View>
-                )}
+                <View
+                  style={[
+                    styles.readyBadge,
+                    transferMode !== 'idle' && styles.inProgressBadge,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.readyDot,
+                      transferMode !== 'idle' && styles.inProgressDot,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.readyText,
+                      transferMode !== 'idle' && styles.inProgressText,
+                    ]}
+                  >
+                    {transferMode === 'sending'
+                      ? 'Sending'
+                      : transferMode === 'receiving'
+                      ? 'Receiving'
+                      : 'Ready'}
+                  </Text>
+                </View>
               </View>
               <ActionRow
-                icon="📄"
+                icon="📁"
                 title={
-                  transferMode === 'sending' ? 'Sending...' : 'Select Document'
+                  transferMode === 'sending'
+                    ? 'Sending...'
+                    : transferMode === 'receiving'
+                    ? 'Receiving...'
+                    : 'Select Document'
                 }
                 subtitle={
-                  transferMode === 'sending'
+                  transferMode === 'sending' || transferMode === 'receiving'
                     ? 'Transfer in progress'
                     : 'Choose a file to share'
+                }
+                disabled={
+                  transferMode === 'receiving' || transferMode === 'sending'
                 }
                 onPress={onPickFile}
               />
@@ -254,16 +281,11 @@ const SessionScreen: React.FC<Props> = ({
               </View>
 
               {sentFiles.length === 0 ? (
-                <View style={styles.emptyState}>
-                  {/* <Text style={styles.emptyIcon}>📭</Text> */}
-                  <View style={styles.iconContainer}>
-                    <Text style={styles.iconText}>{icon}</Text>
-                  </View>
-                  <Text style={styles.emptyTitle}>No transfers yet</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Files you send will appear here
-                  </Text>
-                </View>
+                <EmptyState
+                  icon={icon}
+                  title="No transfers yet"
+                  subtitle="Files you send will appear here"
+                />
               ) : (
                 sentFiles.map((file, idx) => (
                   <FileItemComponent
@@ -292,16 +314,11 @@ const SessionScreen: React.FC<Props> = ({
             </View>
 
             {receivedFiles.length === 0 ? (
-              <View style={styles.emptyState}>
-                {/* <Text style={styles.emptyIcon}>📥</Text> */}
-                <View style={styles.iconContainer}>
-                  <Text style={styles.iconText}>{icon}</Text>
-                </View>
-                <Text style={styles.emptyTitle}>No files received</Text>
-                <Text style={styles.emptySubtitle}>
-                  Incoming files will appear here
-                </Text>
-              </View>
+              <EmptyState
+                icon={icon}
+                title="No files received"
+                subtitle="Incoming files will appear here"
+              />
             ) : (
               receivedFiles.map((file, idx) => (
                 <FileItemComponent
@@ -469,6 +486,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  inProgressBadge: {
+    backgroundColor: '#804DCC15',
+  },
+  inProgressDot: {
+    backgroundColor: '#804DCC',
+  },
+  inProgressText: {
+    color: '#804DCC',
+  },
   historyCount: {
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 12,
@@ -479,49 +505,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 24,
-    backgroundColor: 'white',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
-  iconContainer: {
-    width: 72,
-    height: 72,
-    backgroundColor: '#804DCC15',
-    borderRadius: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 3,
-    borderColor: '#804DCC30',
-  },
-  iconText: {
-    fontSize: 36,
-    color: '#804DCC',
-    fontWeight: '300',
   },
 });
 

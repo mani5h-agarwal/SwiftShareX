@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
-import ProgressBar from './ProgressBar';
-import { formatFileSize, formatTime, getFileExtension } from '../utils/fileUtils'
+import { formatFileSize, getFileExtension, formatRelativeTime } from '../utils/fileUtils';
+import CircularLoader from './CircularLoader';
 
+// Types
 type FileTransferRecord = {
   id: string;
   fileName: string;
@@ -11,42 +12,48 @@ type FileTransferRecord = {
   status: 'completed' | 'cancelled' | 'in-progress';
 };
 
-const FileItemComponent = ({
-  file,
-  progress,
-  onCancel,
-  index,
-}: {
+// Main File Item Component
+type FileItemProps = {
   file: FileTransferRecord;
   progress: number;
   onCancel?: (id: string) => void;
   index: number;
-}) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+};
+
+const FileItemComponent = ({
+  file,
+  progress,
+  onCancel,
+  index: _index,
+}: FileItemProps) => {
   const scale = useRef(new Animated.Value(1)).current;
+  const verticalProgress = useRef(new Animated.Value(0)).current;
 
   const isInProgress = file.status === 'in-progress';
   const isCompleted = file.status === 'completed';
-  // const isCancelled = file.status === 'cancelled';
 
   const accentColor = isInProgress
-    ? '#3B82F6'
+    ? '#804DCC'
     : isCompleted
     ? '#10B981'
-    : '#EF4444';
+    : '#FF6B6B';
 
-  const statusIcon = isInProgress ? '↻' : isCompleted ? '✓' : '×';
+  const statusIcon = isCompleted ? '✓' : '×';
 
+  // Animate the left vertical status bar to reflect progress
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 80,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, index]);
+    const target = isInProgress ? progress : 1; // full when completed/cancelled
+    Animated.timing(verticalProgress, {
+      toValue: target,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isInProgress, progress, verticalProgress]);
+
+  const verticalHeight = verticalProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   const handlePressIn = () => {
     Animated.spring(scale, {
@@ -64,32 +71,39 @@ const FileItemComponent = ({
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.fileCardWrapper,
-        {
-          opacity: fadeAnim,
-          transform: [{ scale }],
-        },
-      ]}
-    >
+    // <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         style={styles.fileCard}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={!isInProgress}
       >
-        {/* Gradient Status Bar */}
-        <View style={[styles.statusBar, { backgroundColor: accentColor }]} />
+        {/* Left Vertical Progress Bar */}
+        <View style={styles.statusBar}>
+          <Animated.View
+            style={[
+              styles.statusBarFill,
+              { height: verticalHeight, backgroundColor: accentColor },
+            ]}
+          />
+        </View>
 
         {/* File Icon with Extension Badge */}
         <View style={styles.iconWrapper}>
-          <View style={[styles.fileIcon, { backgroundColor: `${accentColor}15` }]}>
-            <Text style={[styles.fileIconText, { color: accentColor }]}>
-              {statusIcon}
-            </Text>
+          <View
+            style={[styles.fileIcon, { backgroundColor: `${accentColor}15` }]}
+          >
+            {isInProgress ? (
+              <CircularLoader color={accentColor} />
+            ) : (
+              <Text style={[styles.fileIconText, { color: accentColor }]}>
+                {statusIcon}
+              </Text>
+            )}
           </View>
-          <View style={[styles.extensionBadge, { backgroundColor: accentColor }]}>
+          <View
+            style={[styles.extensionBadge, { backgroundColor: accentColor }]}
+          >
             <Text style={styles.extensionText}>
               {getFileExtension(file.fileName)}
             </Text>
@@ -102,69 +116,45 @@ const FileItemComponent = ({
             <Text style={styles.fileName} numberOfLines={1}>
               {file.fileName}
             </Text>
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: `${accentColor}15` },
-              ]}
-            >
-              <View style={[styles.statusDot, { backgroundColor: accentColor }]} />
-              <Text style={[styles.statusText, { color: accentColor }]}>
-                {isInProgress
-                  ? 'Transferring'
-                  : isCompleted
-                  ? 'Completed'
-                  : 'Cancelled'}
-              </Text>
-            </View>
+            {isInProgress && onCancel && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.cancelButtonPressed,
+                ]}
+                onPress={() => onCancel(file.id)}
+              >
+                <Text style={styles.cancelIcon}>✕</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.fileMetaRow}>
             <View style={styles.sizeChip}>
-              <Text style={styles.sizeText}>{formatFileSize(file.fileSize)}</Text>
-            </View>
-            <Text style={styles.metaDivider}>•</Text>
-            <Text style={styles.timeText}>{formatTime(file.timestamp)}</Text>
-          </View>
-
-          {isInProgress && (
-            <View style={styles.progressSection}>
-              <ProgressBar progress={progress} />
-              <Text style={[styles.progressPercentage, { color: accentColor }]}>
-                {Math.round(progress * 100)}%
+              <Text style={styles.sizeText}>
+                {formatFileSize(file.fileSize)}
               </Text>
             </View>
-          )}
-        </View>
-
-        {/* Cancel Button */}
-        {isInProgress && onCancel && (
-          <Pressable
-            style={({pressed}) => [
-              styles.cancelButton,
-              pressed && styles.cancelButtonPressed,
-            ]}
-            onPress={() => onCancel(file.id)}
-          >
-            <Text style={styles.cancelIcon}>✕</Text>
-          </Pressable>
-        )}
-
-        {/* Completion Checkmark */}
-        {isCompleted && (
-          <View style={styles.completionBadge}>
-            <Text style={styles.completionIcon}>✓</Text>
+            <Text style={styles.metaDivider}>•</Text>
+            <Text style={styles.timeText}>{formatRelativeTime(file.timestamp)}</Text>
+            {isInProgress && (
+              <>
+                <Text style={styles.metaDivider}>•</Text>
+                <Text
+                  style={[styles.progressPercentage, { color: accentColor }]}
+                >
+                  {Math.round(progress * 100)}%
+                </Text>
+              </>
+            )}
           </View>
-        )}
+        </View>
       </Pressable>
-    </Animated.View>
+    // </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  fileCardWrapper: {
-    // marginBottom: 12,
-  },
   fileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -176,6 +166,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     position: 'relative',
     overflow: 'hidden',
+    minHeight: 92,
   },
   statusBar: {
     position: 'absolute',
@@ -183,13 +174,21 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 5,
+    backgroundColor: '#E5E7EB',
+  },
+  statusBarFill: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    width: '100%',
   },
   iconWrapper: {
     position: 'relative',
+    padding: 3,
   },
   fileIcon: {
-    width: 64,
-    height: 64,
+    width: 56,
+    height: 56,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
@@ -238,29 +237,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     flex: 1,
   },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
   fileMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   sizeChip: {
     backgroundColor: '#F3F4F6',
@@ -283,49 +264,28 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '600',
   },
-  progressSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
   progressPercentage: {
     fontSize: 13,
     fontWeight: '800',
-    minWidth: 42,
-    textAlign: 'right',
   },
   cancelButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#FEE2E2',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FECACA',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
   },
   cancelButtonPressed: {
     backgroundColor: '#FCA5A5',
-    transform: [{ scale: 0.95 }],
+    transform: [{ scale: 0.9 }],
   },
   cancelIcon: {
-    fontSize: 20,
+    fontSize: 12,
     color: '#EF4444',
-    fontWeight: '700',
-  },
-  completionBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completionIcon: {
-    fontSize: 18,
-    color: 'white',
-    fontWeight: '700',
+    fontWeight: '900',
   },
 });
 

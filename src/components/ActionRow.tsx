@@ -6,6 +6,7 @@ type ActionRowProps = {
   title: string; // main text
   subtitle: string; // sub text
   onPress: () => void;
+  disabled?: boolean; // optional disabled state
 };
 
 export const ActionRow: React.FC<ActionRowProps> = ({
@@ -13,16 +14,14 @@ export const ActionRow: React.FC<ActionRowProps> = ({
   title,
   subtitle,
   onPress,
+  disabled,
 }) => {
   return (
     <TouchableOpacity
-      style={[
-        styles.container,
-        title === 'Sending...' && styles.disabledContainer,
-      ]}
+      style={[styles.container, disabled && styles.disabledContainer]}
       onPress={onPress}
       activeOpacity={0.7}
-      disabled={title === 'Sending...'}
+      disabled={disabled}
     >
       <View style={styles.content}>
         <View style={styles.iconContainer}>
