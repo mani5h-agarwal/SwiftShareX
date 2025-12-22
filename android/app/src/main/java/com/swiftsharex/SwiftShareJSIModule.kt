@@ -24,9 +24,11 @@ class SwiftShareJSIModule(
         if (runtimePtr == 0L) {
             throw IllegalStateException("JS runtime not ready")
         }
-        
-        // Just install - path resolution now handled by FilePathResolver
-        nativeInstall(runtimePtr)
+
+        // Ensure JSI interactions run on the JS thread to avoid crashes
+        reactContext.runOnJSQueueThread {
+            nativeInstall(runtimePtr)
+        }
     }
     // JNI hooks
     private external fun nativeInstall(runtimePtr: Long)

@@ -144,19 +144,21 @@ function App() {
     discoverySocketRef.current = null;
     if (sock) {
       try {
-        sock.removeAllListeners?.();
+        // Just close without removing listeners - listeners handle any final errors
         sock.close();
-      } catch {
-        // ignore socket close errors
-      }
+      } catch {}
     }
 
     closingDiscoveryRef.current = false;
   };
 
   const sendHello = (sock: Socket, targetAddr: string, currentRole: Role) => {
-    const hello = `${HELLO_PREFIX}|${deviceId}|${deviceName}|${currentRole}`;
-    sock.send(hello, 0, hello.length, DISCOVERY_PORT, targetAddr);
+    try {
+      const hello = `${HELLO_PREFIX}|${deviceId}|${deviceName}|${currentRole}`;
+      sock.send(hello, 0, hello.length, DISCOVERY_PORT, targetAddr);
+    } catch (e) {
+      console.warn('sendHello failed:', e);
+    }
   };
 
   const sendLock = (
@@ -165,8 +167,12 @@ function App() {
     newSessionId: string,
     currentRole: Role,
   ) => {
-    const lock = `${LOCK_PREFIX}|${newSessionId}|${deviceId}|${deviceName}|${currentRole}`;
-    sock.send(lock, 0, lock.length, DISCOVERY_PORT, targetAddr);
+    try {
+      const lock = `${LOCK_PREFIX}|${newSessionId}|${deviceId}|${deviceName}|${currentRole}`;
+      sock.send(lock, 0, lock.length, DISCOVERY_PORT, targetAddr);
+    } catch (e) {
+      console.warn('sendLock failed:', e);
+    }
   };
 
   const sendBye = (
@@ -174,8 +180,12 @@ function App() {
     targetAddr: string,
     currentSessionId: string,
   ) => {
-    const bye = `${BYE_PREFIX}|${currentSessionId}|${deviceId}`;
-    sock.send(bye, 0, bye.length, DISCOVERY_PORT, targetAddr);
+    try {
+      const bye = `${BYE_PREFIX}|${currentSessionId}|${deviceId}`;
+      sock.send(bye, 0, bye.length, DISCOVERY_PORT, targetAddr);
+    } catch (e) {
+      console.warn('sendBye failed:', e);
+    }
   };
 
   const sendCancel = (
@@ -183,8 +193,12 @@ function App() {
     targetAddr: string,
     currentSessionId: string,
   ) => {
-    const cancel = `${CANCEL_PREFIX}|${currentSessionId}|${deviceId}`;
-    sock.send(cancel, 0, cancel.length, DISCOVERY_PORT, targetAddr);
+    try {
+      const cancel = `${CANCEL_PREFIX}|${currentSessionId}|${deviceId}`;
+      sock.send(cancel, 0, cancel.length, DISCOVERY_PORT, targetAddr);
+    } catch (e) {
+      console.warn('sendCancel failed:', e);
+    }
   };
 
   const uriToPath = (uri?: string | null) => {
@@ -462,26 +476,106 @@ function App() {
     stopDiscovery();
     closingDiscoveryRef.current = false;
 
-    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-    discoverySocketRef.current = sock;
+    let bindSucceeded = false;
+    let hasShownError = false;
+    let bindTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    sock.on('message', handleMessage(sock, nextRole));
-    sock.on('error', stopDiscovery);
+    const showBindError = () => {
+      if (hasShownError) return;
+      hasShownError = true;
+      if (bindTimeout) clearTimeout(bindTimeout);
 
-    sock.bind(DISCOVERY_PORT, () => {
+      // Null out the ref BEFORE stopDiscovery to prevent re-closing
+      discoverySocketRef.current = null;
+
+      stopDiscovery();
+      Alert.alert(
+        'Network Error',
+        'Could not start discovery. This can happen when:\n\n• Hotspot is starting up (wait a moment and try again)\n• Another app is using port 41234\n• Network permissions are restricted\n\nTry again in a few seconds.',
+      );
+      setRole(null);
+    };
+
+    try {
+      const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+      discoverySocketRef.current = sock;
+
+      // Handle socket errors (including bind failures and "Socket is closed")
+      sock.on('error', err => {
+        console.error('Discovery socket error:', err);
+
+        // If bind hasn't succeeded yet, this is a bind failure
+        if (!bindSucceeded && !hasShownError) {
+          discoverySocketRef.current = null;
+          try {
+            // Remove listeners from the local sock reference
+            sock.removeAllListeners?.();
+          } catch {}
+          try {
+            sock.close();
+          } catch {}
+          showBindError();
+        }
+        // Otherwise, just log and ignore (prevents "Unhandled error" crashes)
+        // This handles "Socket is closed" errors after cleanup
+      });
+
+      sock.on('message', handleMessage(sock, nextRole));
+
+      // Timeout for bind - if bind doesn't succeed in 3 seconds, show error
+      bindTimeout = setTimeout(() => {
+        if (!bindSucceeded) {
+          console.error(
+            'Socket bind timeout - network interface may not be ready',
+          );
+          showBindError();
+        }
+      }, 3000);
+
+      // Bind to any available address on the discovery port
       try {
-        sock.setBroadcast?.(true);
-      } catch {
-        // ignore broadcast failures
+        sock.bind(DISCOVERY_PORT, () => {
+          if (bindTimeout) clearTimeout(bindTimeout);
+          bindSucceeded = true;
+
+          try {
+            sock.setBroadcast?.(true);
+          } catch (e) {
+            console.warn('Failed to enable broadcast:', e);
+          }
+
+          try {
+            sendHello(sock, BROADCAST_ADDR, nextRole);
+          } catch (e) {
+            console.warn('Failed to send initial hello:', e);
+          }
+
+          // Only start interval if bind succeeded
+          discoveryIntervalRef.current = setInterval(() => {
+            try {
+              if (discoverySocketRef.current) {
+                const discover = `${DISCOVER}|${nextRole}`;
+                discoverySocketRef.current.send(
+                  discover,
+                  0,
+                  discover.length,
+                  DISCOVERY_PORT,
+                  BROADCAST_ADDR,
+                );
+              }
+            } catch (e) {
+              console.warn('Failed to send discovery broadcast:', e);
+            }
+          }, 1500);
+        });
+      } catch (bindError) {
+        console.error('Bind threw exception:', bindError);
+        showBindError();
       }
-
-      sendHello(sock, BROADCAST_ADDR, nextRole);
-    });
-
-    discoveryIntervalRef.current = setInterval(() => {
-      const discover = `${DISCOVER}|${nextRole}`;
-      sock.send(discover, 0, discover.length, DISCOVERY_PORT, BROADCAST_ADDR);
-    }, 1500);
+    } catch (e) {
+      console.error('Failed to start discovery:', e);
+      showBindError();
+    }
   };
 
   // const startReceiving = () => {
@@ -717,8 +811,14 @@ function App() {
   const terminateSession = () => {
     clearSendStartTimeout();
 
-    if (discoverySocketRef.current && sessionPeer && sessionId) {
-      sendBye(discoverySocketRef.current, sessionPeer.address, sessionId);
+    if (sessionPeer && sessionId && discoverySocketRef.current) {
+      const existingSock = discoverySocketRef.current;
+      try {
+        sendBye(existingSock, sessionPeer.address, sessionId);
+      } catch {}
+      try {
+        sendBye(existingSock, BROADCAST_ADDR, sessionId);
+      } catch {}
     }
 
     setSessionPeer(null);
@@ -731,10 +831,21 @@ function App() {
     setSentFiles([]);
     setReceivedFiles([]);
     currentTransferIdRef.current = null;
-    cleanupLocalCopy();
-    globalThis.cancelTransfer?.();
+
+    try {
+      cleanupLocalCopy();
+    } catch {}
+
+    try {
+      globalThis.cancelTransfer?.();
+    } catch {}
+
     stopProgressPolling();
-    stopDiscovery();
+
+    // Defer socket shutdown slightly to allow BYE to flush
+    setTimeout(() => {
+      stopDiscovery();
+    }, 50);
   };
 
   // Device renderer moved into DevicePickerScreen
