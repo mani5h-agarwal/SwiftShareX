@@ -130,13 +130,18 @@ void TransferEngine::receiverThread(uint16_t port)
             continue;
         }
 
-        std::string filename(meta.nameLen, '\0');
-        if (recv(client, filename.data(), meta.nameLen, MSG_WAITALL) != meta.nameLen)
+        // Read filename with proper UTF-8 handling
+        std::vector<char> filenameBuf(meta.nameLen + 1, '\0');
+        if (recv(client, filenameBuf.data(), meta.nameLen, MSG_WAITALL) != meta.nameLen)
         {
             LOGE("filename read failed");
             close(client);
             continue;
         }
+        filenameBuf[meta.nameLen] = '\0'; // Ensure null-termination
+        std::string filename(filenameBuf.data());
+
+        LOGI("Received file metadata: %s (%llu bytes, nameLen=%u)", filename.c_str(), (unsigned long long)meta.fileSize, meta.nameLen);
 
         std::string outPath;
         if (pathResolver_)
@@ -166,37 +171,43 @@ void TransferEngine::receiverThread(uint16_t port)
             currentFileSize_ = meta.fileSize;
         }
 
-        int fd = open(outPath.c_str(), O_CREAT | O_WRONLY, 0644);
+        // Use O_TRUNC to avoid leftover bytes if a file with the same name exists
+        int fd = open(outPath.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (fd < 0)
         {
-            LOGE("file open failed");
+            LOGE("file open failed: %s", outPath.c_str());
             close(client);
             continue;
         }
 
         off_t existing = lseek(fd, 0, SEEK_END);
         uint64_t resumeOffset = existing;
-        send(client, &resumeOffset, sizeof(resumeOffset), 0);
+        
+        if (send(client, &resumeOffset, sizeof(resumeOffset), 0) != sizeof(resumeOffset))
+        {
+            LOGE("Failed to send resume offset");
+            close(fd);
+            close(client);
+            continue;
+        }
+
+        LOGI("Sent resume offset: %llu, starting to receive data...", (unsigned long long)resumeOffset);
 
         bytesTransferred_ = resumeOffset;
         totalBytes_ = meta.fileSize;
 
         while (!cancelled_ && bytesTransferred_ < totalBytes_)
         {
-            uint8_t marker;
-            if (recv(client, &marker, 1, MSG_WAITALL) != 1)
-                break;
-
-            if (marker == END_OF_TRANSFER)
-                break;
-
             DataChunkHeader hdr{};
-            ((uint8_t *)&hdr)[0] = marker;
 
-            if (recv(client, ((uint8_t *)&hdr) + 1, sizeof(hdr) - 1, MSG_WAITALL) != sizeof(hdr) - 1)
+            // Read full header; zero length signals transfer end
+            if (recv(client, &hdr, sizeof(hdr), MSG_WAITALL) != sizeof(hdr))
                 break;
 
-            if (hdr.length == 0 || hdr.length > meta.chunkSize)
+            if (hdr.length == 0)
+                break;
+
+            if (hdr.length > meta.chunkSize)
                 break;
 
             std::vector<char> buffer(hdr.length);
@@ -296,6 +307,13 @@ void TransferEngine::senderThread(const std::string &filePath,
     setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
 
+    // Set socket timeouts to prevent indefinite blocking
+    struct timeval timeout;
+    timeout.tv_sec = 30;  // 30 second timeout
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -325,15 +343,36 @@ void TransferEngine::senderThread(const std::string &filePath,
     hello.mode = MODE_SEND;
     hello.reserved = 0;
 
-    send(sock, &hello, sizeof(hello), 0);
+    if (send(sock, &hello, sizeof(hello), 0) != sizeof(hello))
+    {
+        LOGE("Failed to send HELLO packet");
+        close(sock);
+        close(fd);
+        return;
+    }
 
     FileMeta meta{};
     meta.fileSize = fileSize;
     meta.nameLen = filename.size();
     meta.chunkSize = 256 * 1024; // 256 KB
 
-    send(sock, &meta, sizeof(meta), 0);
-    send(sock, filename.data(), filename.size(), 0);
+    if (send(sock, &meta, sizeof(meta), 0) != sizeof(meta))
+    {
+        LOGE("Failed to send FileMeta");
+        close(sock);
+        close(fd);
+        return;
+    }
+
+    if (send(sock, filename.data(), filename.size(), 0) != (ssize_t)filename.size())
+    {
+        LOGE("Failed to send filename");
+        close(sock);
+        close(fd);
+        return;
+    }
+
+    LOGI("Sent file metadata, waiting for resume offset...");
 
     uint64_t resumeOffset = 0;
     if (recv(sock, &resumeOffset, sizeof(resumeOffset), MSG_WAITALL) != sizeof(resumeOffset))
@@ -343,6 +382,8 @@ void TransferEngine::senderThread(const std::string &filePath,
         close(fd);
         return;
     }
+
+    LOGI("Resume offset received: %llu, starting transfer...", (unsigned long long)resumeOffset);
 
     lseek(fd, resumeOffset, SEEK_SET);
     bytesTransferred_ = resumeOffset;
@@ -358,15 +399,23 @@ void TransferEngine::senderThread(const std::string &filePath,
         DataChunkHeader hdr{};
         hdr.length = (uint32_t)n;
 
-        send(sock, &hdr, sizeof(hdr), 0);
+        if (send(sock, &hdr, sizeof(hdr), 0) != sizeof(hdr))
+        {
+            LOGE("Failed to send DataChunkHeader");
+            close(sock);
+            close(fd);
+            return;
+        }
+
         ssize_t sent = 0;
         while (sent < n)
         {
             ssize_t s = send(sock, buffer.data() + sent, n - sent, 0);
             if (s <= 0)
             {
-                LOGE("send() failed");
-                // goto cleanup;
+                LOGE("send() failed during data transfer");
+                close(sock);
+                close(fd);
                 return;
             }
             sent += s;
@@ -374,9 +423,13 @@ void TransferEngine::senderThread(const std::string &filePath,
         bytesTransferred_ += n;
     }
 
-    // 8️⃣ Signal completion
-    uint8_t end = END_OF_TRANSFER;
-    send(sock, &end, sizeof(end), 0);
+    // 8️⃣ Signal completion with zero-length header
+    DataChunkHeader endHdr{};
+    endHdr.length = 0;
+    if (send(sock, &endHdr, sizeof(endHdr), 0) != sizeof(endHdr))
+    {
+        LOGE("Failed to send END marker");
+    }
 
     LOGI("Sender completed transfer");
 

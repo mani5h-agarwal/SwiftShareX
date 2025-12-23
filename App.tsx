@@ -203,9 +203,20 @@ function App() {
 
   const uriToPath = (uri?: string | null) => {
     if (!uri) return '';
-    return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
+    // Remove file:// prefix if present
+    let path = uri.startsWith('file://') ? uri.replace('file://', '') : uri;
+    
+    // Always decode URL-encoded characters (e.g., %20 -> space)
+    // This is necessary for files with spaces and special characters
+    try {
+      return decodeURIComponent(path);
+    } catch {
+      // If decoding fails for some reason, return the path as-is
+      return path;
+    }
   };
 
+  
   const cleanupLocalCopy = async (path?: string | null) => {
     const target = path ?? localCopyPathRef.current;
     if (!target) return;
