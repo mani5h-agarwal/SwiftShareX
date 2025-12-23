@@ -1,4 +1,4 @@
-package com.swiftsharex
+package com.swiftshare
 
 import android.content.Context
 import android.os.Environment

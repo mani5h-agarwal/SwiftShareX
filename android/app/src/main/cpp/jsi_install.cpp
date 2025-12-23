@@ -40,7 +40,7 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
     env->GetJavaVM(&g_jvm);
 
     // Find and cache the FilePathResolver class with global reference
-    jclass localResolverClass = env->FindClass("com/swiftsharex/FilePathResolver");
+    jclass localResolverClass = env->FindClass("com/swiftshare/FilePathResolver");
     if (!localResolverClass)
     {
         LOGE("Failed to find FilePathResolver class");

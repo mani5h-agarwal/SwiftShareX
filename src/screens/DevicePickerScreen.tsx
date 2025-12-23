@@ -7,6 +7,7 @@ import {
   FlatList,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ScanningIndicator from '../components/ScanningIndicator';
 import DeviceCard from '../components/DeviceCard';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
@@ -54,7 +55,7 @@ const DevicePickerScreen: React.FC<Props> = ({
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#FAFBFC" barStyle="dark-content" />
 
       {/* Header */}
@@ -148,7 +149,7 @@ const DevicePickerScreen: React.FC<Props> = ({
           <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

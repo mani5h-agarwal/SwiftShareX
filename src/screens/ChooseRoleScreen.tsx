@@ -8,10 +8,10 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import RoleButton from '../components/RoleButton';
 import RNFS from 'react-native-fs';
 import { ActionRow } from '../components/ActionRow';
-
 
 type Props = {
   onChoose: (role: 'send' | 'receive') => void;
@@ -83,7 +83,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#FAFBFC" barStyle="dark-content" />
 
       {/* Header */}
@@ -122,7 +122,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
           <Text style={styles.featureText}>Lightning fast transfers</Text>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

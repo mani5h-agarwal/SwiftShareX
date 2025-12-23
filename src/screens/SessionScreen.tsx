@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   Animated,
+  Platform,
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
 import EmptyState from '../components/EmptyState';
@@ -144,8 +145,15 @@ const SessionScreen: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#804DCC" barStyle="light-content" />
-
+      <StatusBar
+        translucent={Platform.OS === 'android' && Platform.Version >= 35}
+        backgroundColor={
+          Platform.OS === 'android' && Platform.Version >= 35
+            ? 'transparent'
+            : '#804DCC'
+        }
+        barStyle="light-content"
+      />
       {/* Enhanced Gradient Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -352,7 +360,10 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#804DCC',
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop:
+      Platform.OS === 'android' && Platform.Version >= 35
+        ? (StatusBar.currentHeight ?? 0) + 24
+        : 24,
     paddingBottom: 24,
     position: 'relative',
     overflow: 'hidden',

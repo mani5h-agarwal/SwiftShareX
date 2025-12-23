@@ -3,16 +3,16 @@
 
 using namespace facebook;
 
-extern void installJSI(jsi::Runtime &runtime, JNIEnv* env, jobject moduleInstance);
+extern void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance);
 
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_swiftsharex_SwiftShareJSIModule_nativeInstall(
+extern "C" JNIEXPORT void JNICALL
+Java_com_swiftshare_SwiftShareJSIModule_nativeInstall(
     JNIEnv *env,
     jobject thiz,
-    jlong runtimePtr) {
+    jlong runtimePtr)
+{
     auto *runtime = reinterpret_cast<jsi::Runtime *>(runtimePtr);
-    
+
     // Pass the module instance so we can get the context
     installJSI(*runtime, env, thiz);
 }
