@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Modal, Pressable, StyleSheet, Image } from 'react-native';
 import { formatFileSize, getFileExtension } from '../utils/fileUtils';
 
 type PickedFile = {
@@ -38,9 +38,12 @@ const SendConfirmationModal = ({
       <View style={styles.modalContainer}>
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <Text style={styles.iconText}>↑</Text>
+            <Image
+              style={styles.iconImage}
+              resizeMode="contain"
+              source={require('../assets/arrow.png')}
+            />
           </View>
-
           <View style={styles.headerText}>
             <Text style={styles.modalTitle}>Send File?</Text>
             <Text style={styles.modalSubtitle}>Confirm your transfer</Text>
@@ -354,10 +357,9 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ff6b6ba1',
   },
-  iconText: {
-    fontSize: 36,
-    color: '#fa5252ff',
-    fontWeight: '300',
+  iconImage: {
+    width: 24,
+    tintColor: '#fa5252ff',
   },
 });
 

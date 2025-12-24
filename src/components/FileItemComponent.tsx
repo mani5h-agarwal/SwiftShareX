@@ -1,7 +1,17 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
-import { formatFileSize, getFileExtension, formatRelativeTime } from '../utils/fileUtils';
-import CircularLoader from './CircularLoader';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Animated,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  formatFileSize,
+  getFileExtension,
+  formatRelativeTime,
+} from '../utils/fileUtils';
 
 // Types
 type FileTransferRecord = {
@@ -72,84 +82,80 @@ const FileItemComponent = ({
 
   return (
     // <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        style={styles.fileCard}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={!isInProgress}
-      >
-        {/* Left Vertical Progress Bar */}
-        <View style={styles.statusBar}>
-          <Animated.View
-            style={[
-              styles.statusBarFill,
-              { height: verticalHeight, backgroundColor: accentColor },
-            ]}
-          />
-        </View>
+    <Pressable
+      style={styles.fileCard}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={!isInProgress}
+    >
+      {/* Left Vertical Progress Bar */}
+      <View style={styles.statusBar}>
+        <Animated.View
+          style={[
+            styles.statusBarFill,
+            { height: verticalHeight, backgroundColor: accentColor },
+          ]}
+        />
+      </View>
 
-        {/* File Icon with Extension Badge */}
-        <View style={styles.iconWrapper}>
-          <View
-            style={[styles.fileIcon, { backgroundColor: `${accentColor}15` }]}
-          >
-            {isInProgress ? (
-              <CircularLoader color={accentColor} />
-            ) : (
-              <Text style={[styles.fileIconText, { color: accentColor }]}>
-                {statusIcon}
-              </Text>
-            )}
-          </View>
-          <View
-            style={[styles.extensionBadge, { backgroundColor: accentColor }]}
-          >
-            <Text style={styles.extensionText}>
-              {getFileExtension(file.fileName)}
+      {/* File Icon with Extension Badge */}
+      <View style={styles.iconWrapper}>
+        <View
+          style={[styles.fileIcon, { backgroundColor: `${accentColor}15` }]}
+        >
+          {isInProgress ? (
+            <ActivityIndicator color={accentColor} size="small" />
+          ) : (
+            <Text style={[styles.fileIconText, { color: accentColor }]}>
+              {statusIcon}
             </Text>
-          </View>
+          )}
+        </View>
+        <View style={[styles.extensionBadge, { backgroundColor: accentColor }]}>
+          <Text style={styles.extensionText}>
+            {getFileExtension(file.fileName)}
+          </Text>
+        </View>
+      </View>
+
+      {/* File Info */}
+      <View style={styles.fileInfo}>
+        <View style={styles.fileHeader}>
+          <Text style={styles.fileName} numberOfLines={1}>
+            {file.fileName}
+          </Text>
+          {isInProgress && onCancel && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.cancelButton,
+                pressed && styles.cancelButtonPressed,
+              ]}
+              onPress={() => onCancel(file.id)}
+            >
+              <Text style={styles.cancelIcon}>✕</Text>
+            </Pressable>
+          )}
         </View>
 
-        {/* File Info */}
-        <View style={styles.fileInfo}>
-          <View style={styles.fileHeader}>
-            <Text style={styles.fileName} numberOfLines={1}>
-              {file.fileName}
-            </Text>
-            {isInProgress && onCancel && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.cancelButton,
-                  pressed && styles.cancelButtonPressed,
-                ]}
-                onPress={() => onCancel(file.id)}
-              >
-                <Text style={styles.cancelIcon}>✕</Text>
-              </Pressable>
-            )}
+        <View style={styles.fileMetaRow}>
+          <View style={styles.sizeChip}>
+            <Text style={styles.sizeText}>{formatFileSize(file.fileSize)}</Text>
           </View>
-
-          <View style={styles.fileMetaRow}>
-            <View style={styles.sizeChip}>
-              <Text style={styles.sizeText}>
-                {formatFileSize(file.fileSize)}
+          <Text style={styles.metaDivider}>•</Text>
+          <Text style={styles.timeText}>
+            {formatRelativeTime(file.timestamp)}
+          </Text>
+          {isInProgress && (
+            <>
+              <Text style={styles.metaDivider}>•</Text>
+              <Text style={[styles.progressPercentage, { color: accentColor }]}>
+                {Math.round(progress * 100)}%
               </Text>
-            </View>
-            <Text style={styles.metaDivider}>•</Text>
-            <Text style={styles.timeText}>{formatRelativeTime(file.timestamp)}</Text>
-            {isInProgress && (
-              <>
-                <Text style={styles.metaDivider}>•</Text>
-                <Text
-                  style={[styles.progressPercentage, { color: accentColor }]}
-                >
-                  {Math.round(progress * 100)}%
-                </Text>
-              </>
-            )}
-          </View>
+            </>
+          )}
         </View>
-      </Pressable>
+      </View>
+    </Pressable>
     // </Animated.View>
   );
 };

@@ -5,6 +5,7 @@ import {
   Text,
   Animated,
   StyleSheet,
+  Image,
 } from 'react-native';
 
 type Props = {
@@ -32,7 +33,6 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
 
   const isSend = role === 'send';
   const backgroundColor = isSend ? '#FF6B6B' : '#804DCC';
-  const icon = isSend ? '↑' : '↓';
   const title = isSend ? 'Send' : 'Receive';
   const subtitle = isSend ? 'Share files' : 'Get files';
 
@@ -56,7 +56,14 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
           {/* Content */}
           <View style={styles.buttonContent}>
             <View style={styles.iconContainer}>
-              <Text style={styles.iconText}>{icon}</Text>
+              <Image
+                style={[
+                  styles.iconImage,
+                  !isSend && { transform: [{ rotate: '180deg' }] },
+                ]}
+                resizeMode="contain"
+                source={require('../assets/arrow.png')}
+              />
             </View>
             <Text style={styles.buttonTitle}>{title}</Text>
             <Text style={styles.buttonSubtitle}>{subtitle}</Text>
@@ -135,10 +142,9 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
-  iconText: {
-    fontSize: 40,
-    color: '#fff',
-    fontWeight: '700',
+  iconImage: {
+    width: 24,
+    tintColor: '#fff',
   },
   buttonTitle: {
     fontSize: 24,

@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -113,6 +114,10 @@ void TransferEngine::receiverThread(uint16_t port)
             break;
         }
 
+        // Disable Nagle to reduce latency for control + data mixing
+        int nodelay = 1;
+        setsockopt(client, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+
         // Handle a single file transfer per connection
         HelloPacket hello{};
         if (recv(client, &hello, sizeof(hello), MSG_WAITALL) != sizeof(hello))
@@ -182,7 +187,7 @@ void TransferEngine::receiverThread(uint16_t port)
 
         off_t existing = lseek(fd, 0, SEEK_END);
         uint64_t resumeOffset = existing;
-        
+
         if (send(client, &resumeOffset, sizeof(resumeOffset), 0) != sizeof(resumeOffset))
         {
             LOGE("Failed to send resume offset");
@@ -302,14 +307,18 @@ void TransferEngine::senderThread(const std::string &filePath,
         return;
     }
 
+    // Disable Nagle to reduce latency for control + data mixing
+    int nodelay = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+
     // Optional speed tuning (safe)
-    int bufSize = 4 * 1024 * 1024;
+    int bufSize = 8 * 1024 * 1024;
     setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
 
     // Set socket timeouts to prevent indefinite blocking
     struct timeval timeout;
-    timeout.tv_sec = 30;  // 30 second timeout
+    timeout.tv_sec = 30; // 30 second timeout
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));

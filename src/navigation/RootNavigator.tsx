@@ -40,6 +40,7 @@ type NavigatorProps = {
     size?: number | null;
     path: string;
   } | null;
+  isPickingFile: boolean;
   pickerError: string | null;
   transferMode: 'idle' | 'sending' | 'receiving';
   progress: number;
@@ -73,6 +74,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
   devices,
   sessionPeer,
   pickedFile,
+  isPickingFile,
   pickerError,
   transferMode,
   progress,
@@ -118,6 +120,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
                 role={role}
                 transferPort={transferPort}
                 pickedFile={pickedFile}
+                isPickingFile={isPickingFile}
                 pickerError={pickerError}
                 transferMode={transferMode}
                 progress={progress}

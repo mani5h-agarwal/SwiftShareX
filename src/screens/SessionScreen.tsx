@@ -8,6 +8,7 @@ import {
   StatusBar,
   Animated,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
 import EmptyState from '../components/EmptyState';
@@ -44,6 +45,7 @@ type Props = {
   role: Role;
   transferPort: number;
   pickedFile: PickedFile | null;
+  isPickingFile: boolean;
   pickerError: string | null;
   transferMode: 'idle' | 'sending' | 'receiving';
   progress: number;
@@ -60,6 +62,7 @@ const SessionScreen: React.FC<Props> = ({
   role: _role,
   transferPort: _transferPort,
   pickedFile,
+  isPickingFile,
   pickerError: _pickerError,
   transferMode,
   progress,
@@ -79,7 +82,6 @@ const SessionScreen: React.FC<Props> = ({
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const icon = activeTab === 'send' ? '↑' : '↓';
 
   useEffect(() => {
     Animated.timing(headerAnim, {
@@ -268,7 +270,9 @@ const SessionScreen: React.FC<Props> = ({
                     : 'Choose a file to share'
                 }
                 disabled={
-                  transferMode === 'receiving' || transferMode === 'sending'
+                  transferMode === 'receiving' ||
+                  transferMode === 'sending' ||
+                  isPickingFile
                 }
                 onPress={onPickFile}
               />
@@ -290,7 +294,7 @@ const SessionScreen: React.FC<Props> = ({
 
               {sentFiles.length === 0 ? (
                 <EmptyState
-                  icon={icon}
+                  isSend={true}
                   title="No transfers yet"
                   subtitle="Files you send will appear here"
                 />
@@ -323,7 +327,7 @@ const SessionScreen: React.FC<Props> = ({
 
             {receivedFiles.length === 0 ? (
               <EmptyState
-                icon={icon}
+                isSend={false}
                 title="No files received"
                 subtitle="Incoming files will appear here"
               />
@@ -348,6 +352,14 @@ const SessionScreen: React.FC<Props> = ({
         onConfirm={handleConfirmSend}
         onCancel={handleCancelModal}
       />
+      {isPickingFile && (
+        <View style={styles.overlay} pointerEvents="auto">
+          <View style={styles.overlayCard}>
+            <ActivityIndicator color="#804DCC" size="large" />
+            <Text style={styles.overlayText}>Preparing…</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -516,6 +528,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  overlayCard: {
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    gap: 10,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  overlayText: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
   },
 });
 

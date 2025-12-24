@@ -72,6 +72,7 @@ function App() {
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [sentFiles, setSentFiles] = useState<FileTransferRecord[]>([]);
   const [receivedFiles, setReceivedFiles] = useState<FileTransferRecord[]>([]);
+  const [isPickingFile, setIsPickingFile] = useState<boolean>(false);
 
   const discoverySocketRef = useRef<Socket | null>(null);
   const discoveryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -205,7 +206,7 @@ function App() {
     if (!uri) return '';
     // Remove file:// prefix if present
     let path = uri.startsWith('file://') ? uri.replace('file://', '') : uri;
-    
+
     // Always decode URL-encoded characters (e.g., %20 -> space)
     // This is necessary for files with spaces and special characters
     try {
@@ -216,7 +217,6 @@ function App() {
     }
   };
 
-  
   const cleanupLocalCopy = async (path?: string | null) => {
     const target = path ?? localCopyPathRef.current;
     if (!target) return;
@@ -603,11 +603,11 @@ function App() {
   // };
 
   const pickFile = async () => {
+    setIsPickingFile(true); // 🔒 picker starts
     try {
       setPickerError(null);
       await cleanupLocalCopy();
 
-      // Pick the file
       const picker = DocumentPicker.pickSingle
         ? DocumentPicker.pickSingle
         : async (opts: any) => {
@@ -624,7 +624,6 @@ function App() {
         type: DocumentPicker.types?.allFiles || undefined,
       });
 
-      // Use keepLocalCopy to ensure we have a local copy
       const copyResults = await DocumentPicker.keepLocalCopy({
         files: [
           {
@@ -644,12 +643,12 @@ function App() {
         setPickerError(
           'Could not create a local copy of this file. Please choose a different file from local storage.',
         );
-        return;
+        return; // still safe
       }
 
       const path = uriToPath(copyResult.localUri);
-      setPickerError(null);
       localCopyPathRef.current = path;
+
       setPickedFile({
         name: res.name ?? 'file',
         uri: res.uri,
@@ -657,10 +656,13 @@ function App() {
         path,
       });
     } catch (err: any) {
-      // Best-effort cancel detection; library types may vary
+      // Silent cancel
       // @ts-ignore
       if (DocumentPicker?.isCancel?.(err)) return;
+
       setPickerError('Failed to pick file. Try again.');
+    } finally {
+      setIsPickingFile(false); // 🔓 ALWAYS reset
     }
   };
 
@@ -868,6 +870,7 @@ function App() {
         devices={devices}
         sessionPeer={sessionPeer}
         pickedFile={pickedFile}
+        isPickingFile={isPickingFile}
         pickerError={pickerError}
         transferMode={transferMode}
         progress={progress}

@@ -1,29 +1,36 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 
 type Props = {
   title: string;
   subtitle: string;
-  icon?: string;
+  isSend?: boolean; // true for send icon, false for receive icon
   color?: string; // accent color for icon circle
 };
 
 const EmptyState: React.FC<Props> = ({
   title,
   subtitle,
-  icon,
+  isSend,
   color = '#804DCC',
 }) => {
   return (
     <View style={styles.container}>
-      {icon ? (
+      {isSend !== undefined ? (
         <View
           style={[
             styles.iconContainer,
             { backgroundColor: `${color}15`, borderColor: `${color}30` },
           ]}
         >
-          <Text style={[styles.iconText, { color }]}>{icon}</Text>
+          <Image
+            style={[
+              styles.iconImage,
+              !isSend && { transform: [{ rotate: '180deg' }] },
+            ]}
+            resizeMode="contain"
+            source={require('../assets/arrow.png')}
+          />
         </View>
       ) : null}
       <Text style={styles.title}>{title}</Text>
@@ -52,10 +59,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 3,
   },
-  iconText: {
-    fontSize: 36,
-    fontWeight: '300',
-    opacity: 0.8,
+  iconImage: {
+    width: 24,
+    tintColor: '#804DCC',
+    opacity: 0.7,
   },
   title: {
     fontSize: 18,
