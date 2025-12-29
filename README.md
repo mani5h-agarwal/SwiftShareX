@@ -138,7 +138,6 @@ SwiftShareX is the next-generation file transfer app, built with React Native an
 2. Install dependencies: `npm install` or `yarn`
 3. Start Metro: `npm start` or `yarn start`
 4. Run on Android: `npm run android` or `yarn android`
-5. Run on iOS: `npm run ios` or `yarn ios`
 
 ---
 
