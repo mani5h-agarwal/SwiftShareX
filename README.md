@@ -13,19 +13,19 @@ SwiftShareX is the next-generation file transfer app, built with React Native an
 <!-- Add your screenshots below -->
 <table>
 	<tr>
-		<td><img src="screenshot1.png" alt="Screenshot 1" width="250"/></td>
-		<td><img src="screenshot2.png" alt="Screenshot 2" width="250"/></td>
-		<td><img src="screenshot3.png" alt="Screenshot 3" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/4cac23c1-4754-4048-8134-04fbe02e8d8f" alt="Screenshot 1" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/fbaa8547-4d41-4cb6-8158-1f7c57cacd63" alt="Screenshot 2" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/65505afe-2248-4439-ba27-2945592dbb75" alt="Screenshot 3" width="250"/></td>
 	</tr>
 	<tr>
-		<td><img src="screenshot4.png" alt="Screenshot 4" width="250"/></td>
-		<td><img src="screenshot5.png" alt="Screenshot 5" width="250"/></td>
-		<td><img src="screenshot6.png" alt="Screenshot 6" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/8e934565-2aa8-4320-9ea0-6c7be45aaff5" alt="Screenshot 4" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/ce68bcff-14fa-4804-b1a2-ad9bac4f1cb6" alt="Screenshot 5" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/07c55115-717b-40a5-9af5-11334984148c" alt="Screenshot 6" width="250"/></td>
 	</tr>
 	<tr>
-		<td><img src="screenshot7.png" alt="Screenshot 7" width="250"/></td>
-		<td><img src="screenshot8.png" alt="Screenshot 8" width="250"/></td>
-		<td><img src="screenshot9.png" alt="Screenshot 9" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/025e205a-776a-4691-bd27-9da7b47a8519" alt="Screenshot 7" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/43c0f7bc-fb85-4ad4-b879-07e48d9a5094" alt="Screenshot 8" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/34e81ae6-43ee-47b5-8adb-b2404509a8da" alt="Screenshot 9" width="250"/></td>
 	</tr>
 </table>
 
