@@ -62,7 +62,7 @@ SwiftShareX is the next-generation file transfer app, built with React Native an
 
 ## 📊 Performance
 
-- **Speed**: Up to 10MB/s on 5GHz Wi-Fi
+- **Speed**: Up to 50MB/s on 5GHz Wi-Fi
 - **File Size**: Tested with files of several GBs
 - **No artificial limits**: Transfer as much as your device/network allows
 
