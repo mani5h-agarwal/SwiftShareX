@@ -2,7 +2,7 @@
 
 **Blazing fast, file sharing for Android.**
 
-SwiftShareX is the next-generation file transfer app, built with React Native and powered by a C++ TCP engine for maximum speed. Share files of any size (even multi-GB) at up to **10MB/s** on 5GHz Wi-Fi, with a beautiful, modern UI and zero data collection.
+SwiftShareX is the next-generation file transfer app, built with React Native and powered by a C++ TCP engine for maximum speed. Share files of any size (even multi-GB) at up to **50MB/s** on 5GHz Wi-Fi, with a beautiful, modern UI and zero data collection.
 
 ---
 
@@ -35,7 +35,7 @@ SwiftShareX is the next-generation file transfer app, built with React Native an
 
 ## ✨ Key Features
 
-- **🚀 Ultra-fast Transfers**: Up to 10MB/s on 5GHz Wi-Fi
+- **🚀 Ultra-fast Transfers**: Up to 50MB/s on 5GHz Wi-Fi
 - **📂 No File Size Limit**: Send and receive files of any size, even multi-GB
 - **🔌 100% Offline**: Works over local Wi-Fi or hotspot, no internet needed
 - **🔒 Private & Secure**: No data collection, no cloud, direct device-to-device
