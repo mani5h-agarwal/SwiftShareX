@@ -25,9 +25,11 @@ jobs:
 
       - name: Install dependencies (Root)
         run: npm install
+        shell: bash
 
       - name: Install dependencies (Desktop)
         run: cd desktop && npm install
+        shell: bash
 
       - name: Build and Release
         env:
@@ -41,3 +43,4 @@ jobs:
           else
             npm run build:app -- --win
           fi
+        shell: bash
