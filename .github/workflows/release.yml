@@ -12,6 +12,8 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
