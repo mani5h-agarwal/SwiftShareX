@@ -27,6 +27,11 @@ const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
 const TRANSFER_PORT = 5001;
 const SEND_START_TIMEOUT_MS = 8000;
 
+const initialWindowMetrics = {
+  frame: { x: 0, y: 0, width: 0, height: 0 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+};
+
 type Role = 'send' | 'receive';
 type DiscoveredDevice = {
   id: string;
@@ -99,7 +104,7 @@ function App() {
   useEffect(() => {
     DeviceInfo.getDeviceName()
       .then(name => {
-        setDeviceName(name);
+        setDeviceName(name.replace(/\.local$/i, ''));
       })
       .catch(() => {
         // Fallback to default name if error
@@ -864,7 +869,7 @@ function App() {
   // Device renderer moved into DevicePickerScreen
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <RootNavigator
         role={role}
         devices={devices}

@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (Root)
+        run: npm install
+
+      - name: Install dependencies (Desktop)
+        run: cd desktop && npm install
+
+      - name: Build and Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd desktop
+          # Note: electron-builder automatically handles uploading to GitHub Releases
+          # if a GITHUB_TOKEN is present and the repository is hosted on GitHub.
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            npm run build:app -- --mac
+          else
+            npm run build:app -- --win
+          fi

@@ -61,7 +61,7 @@ const RoleButton: React.FC<Props> = ({ onPress, role }) => {
                   styles.iconImage,
                   !isSend && { transform: [{ rotate: '180deg' }] },
                 ]}
-                resizeMode="contain"
+                // resizeMode="contain"
                 source={require('../assets/arrow.png')}
               />
             </View>
@@ -144,6 +144,7 @@ const styles = StyleSheet.create({
   },
   iconImage: {
     width: 24,
+    height: 24,
     tintColor: '#fff',
   },
   buttonTitle: {

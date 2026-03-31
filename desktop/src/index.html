@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SwiftShareX</title>
+    <script>
+      // ─── Environment ──────────────────────────────────────────────────────────
+      // Essential shims for React Native Web in Electron
+      window.global = window;
+      window.Buffer = window.Buffer || { isBuffer: function() { return false; } };
+      
+      if (!window.process) window.process = { env: { NODE_ENV: 'production' } };
+      if (!window.process.env) window.process.env = { NODE_ENV: 'production' };
+      window.process.version  = window.process.version  || 'v18.0.0';
+      window.process.nextTick = window.process.nextTick || function(f) { setTimeout(f, 0); };
+      window.process.platform = window.process.platform || 'darwin';
+    </script>
+    <style>
+      /* Base styles to replicate React Native structure */
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        background-color: #000;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

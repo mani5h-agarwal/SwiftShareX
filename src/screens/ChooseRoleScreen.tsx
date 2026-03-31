@@ -20,7 +20,16 @@ type Props = {
 const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
   const openSwiftShareXFolder = async () => {
     try {
-      // Get the SwiftShareX folder path
+      // Handle Desktop (Electron)
+      if (Platform.OS === 'web' || (globalThis as any).swiftshareIPC) {
+        const ipc = (globalThis as any).swiftshareIPC;
+        if (ipc?.openDownloadsFolder) {
+          await ipc.openDownloadsFolder();
+          return;
+        }
+      }
+
+      // Get the SwiftShareX folder path for Mobile
       const swiftShareXPath = Platform.select({
         android: `${RNFS.DownloadDirectoryPath}/SwiftShareX`,
         ios: `${RNFS.DocumentDirectoryPath}/SwiftShareX`,
