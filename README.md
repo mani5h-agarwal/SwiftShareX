@@ -22,7 +22,7 @@ Get the latest version of SwiftShareX for all your devices:
 <!-- Add your screenshots below -->
 <table>
 	<tr>
-		<td><img src="https://github.com/user-attachments/assets/4cac23c1-4754-4048-8134-04fbe02e8d8f" alt="Screenshot 1" width="250"/></td>
+		<td><img src="https://github.com/user-attachments/assets/04f128c9-001b-409f-90e0-56f62fb6092e" alt="Screenshot 1" width="250"/></td>
 		<td><img src="https://github.com/user-attachments/assets/fbaa8547-4d41-4cb6-8158-1f7c57cacd63" alt="Screenshot 2" width="250"/></td>
 		<td><img src="https://github.com/user-attachments/assets/65505afe-2248-4439-ba27-2945592dbb75" alt="Screenshot 3" width="250"/></td>
 	</tr>
