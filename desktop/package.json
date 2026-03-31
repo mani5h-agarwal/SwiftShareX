@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:app": "npm run build && electron-builder --mac --win",
+    "build:app": "npm run build && electron-builder",
     "start": "electron ."
   },
   "build": {
