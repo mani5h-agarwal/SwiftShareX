@@ -1,147 +1,847 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SwiftShareX | Ultra-Fast Local File Sharing</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>SwiftShareX — Local file sharing, lightning fast</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0c0c0f;
+            --gray: #f4f4f4;
+            --accent: #e8522a;
+            --accent2: #7c4dcc;
+            --graydark: #888888;
+            --border: rgba(12, 12, 15, 0.1);
+            --card-bg: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: white;
+            color: var(--ink);
+            height: 100%;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* NAV */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.4rem 3rem;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: rgba(245, 243, 238, 0.85);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 1.1rem;
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-mark {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-cta {
+            font-weight: 700;
+            font-size: 0.78rem;
+            padding: 0.5rem 1rem;
+            background: var(--ink);
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            letter-spacing: 0.02em;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .nav-cta:hover {
+            background: var(--accent);
+            transform: translateY(-1px);
+        }
+
+        /* HERO */
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 3rem;
+            gap: 5rem;
+            align-items: center;
+            flex: 1;
+        }
+
+        .hero-left {
+            padding: 3rem 0;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent2);
+            background: rgba(234, 222, 255, 0.2);
+            border: 1px solid rgb(124 77 204 / 0.9);
+            padding: 0.3rem 0.75rem;
+            border-radius: 999px;
+            margin-bottom: 1.5rem;
+        }
+
+        .eyebrow-dot {
+            width: 5px;
+            height: 5px;
+            background: var(--accent2);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.7);
+            }
+        }
+
+        h1 {
+            font-size: clamp(2.8rem, 5vw, 4rem);
+            font-weight: 800;
+            letter-spacing: -2.5px;
+            line-height: 1.02;
+            margin-bottom: 1.4rem;
+        }
+
+        h1 .line2 {
+            display: block;
+            color: var(--accent);
+        }
+
+        .hero-desc {
+            font-size: 1rem;
+            line-height: 1.75;
+            color: var(--graydark);
+            font-weight: 300;
+            max-width: 360px;
+            margin-bottom: 2.2rem;
+        }
+
+        .icon {
+            width: 13px;
+            height: 13px;
+            opacity: 0.7;
+        }
+
+        /* Download buttons */
+        .btns {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.8rem 1.5rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            font-family: 'DM Sans', sans-serif;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+            letter-spacing: 0.01em;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: var(--ink);
+            color: white;
+            box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 8px 24px rgba(12, 12, 15, 0.25);
+        }
+
+        .btn-secondary {
+            background: var(--gray);
+            color: var(--ink);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+            background: #fff;
+        }
+
+        /* Loading state */
+        .btn.loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .btn-icon {
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 1.8rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-num {
+            font-weight: 500;
+            font-size: 1.2rem;
+            /* letter-spacing: ; */
+            color: var(--ink);
+            line-height: 1;
+            margin-bottom: 0.2rem;
+        }
+
+        .stat-num span {
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.72rem;
+            color: var(--graydark);
+            letter-spacing: 0.02em;
+        }
+
+        /* HERO RIGHT — Demo UI */
+        .hero-right {
+            position: relative;
+            padding: 2rem 0;
+        }
+
+        .demo-window {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 4px 0 0 rgba(12, 12, 15, 0.08), 0 20px 60px rgba(12, 12, 15, 0.08);
+        }
+
+        .demo-titlebar {
+            background: var(--gray);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .traffic-light {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+
+        .tl-r {
+            background: #ff5f57;
+        }
+
+        .tl-y {
+            background: #febc2e;
+        }
+
+        .tl-g {
+            background: #28c840;
+        }
+
+        .demo-title-text {
+            font-size: 0.72rem;
+            color: var(--graydark);
+            margin-left: 0.5rem;
+            font-weight: 500;
+        }
+
+        .demo-body {
+            padding: 1.2rem;
+        }
+
+        .device-card {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1rem 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            background: #fafaf8;
+        }
+
+        .device-card.send {
+            border-color: rgba(232, 82, 42, 0.3);
+            background: rgba(232, 82, 42, 0.02);
+        }
+
+        .device-card.recv {
+            border-color: rgba(124, 77, 204, 0.3);
+            background: rgba(124, 77, 204, 0.02);
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .device-card.send .avatar {
+            background: rgba(232, 82, 42, 0.1);
+            color: var(--accent);
+        }
+
+        .device-card.recv .avatar {
+            background: rgba(124, 77, 204, 0.1);
+            color: var(--accent2);
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: -0.2px;
+        }
+
+        .device-ip {
+            font-size: 0.7rem;
+            color: var(--graydark);
+            margin-top: 2px;
+            font-weight: 300;
+        }
+
+        .tag {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+        }
+
+        .device-card.send .tag {
+            background: rgba(232, 82, 42, 0.1);
+            color: var(--accent);
+        }
+
+        .device-card.recv .tag {
+            background: rgba(124, 77, 204, 0.1);
+            color: var(--accent2);
+        }
+
+        .transfer-section {
+            padding: 0.8rem 0.5rem;
+        }
+
+        .transfer-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .transfer-filename {
+            font-size: 0.72rem;
+            color: var(--ink);
+            font-weight: 500;
+        }
+
+        .transfer-speed {
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .track {
+            height: 4px;
+            background: var(--gray);
+            border-radius: 99px;
+            overflow: hidden;
+            margin-bottom: 0.4rem;
+        }
+
+        .fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 99px;
+            background: var(--accent);
+            animation: xfer 2.8s ease-in-out infinite;
+        }
+
+        @keyframes xfer {
+            0% {
+                width: 0%;
+                opacity: 1;
+            }
+
+            65% {
+                width: 100%;
+                opacity: 1;
+            }
+
+            80% {
+                width: 100%;
+                opacity: 0;
+            }
+
+            81% {
+                width: 0%;
+                opacity: 0;
+            }
+
+            100% {
+                width: 0%;
+                opacity: 1;
+            }
+        }
+
+        .transfer-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.67rem;
+            color: var(--graydark);
+        }
+
+        /* macOS note */
+        .mac-note {
+            margin-top: 1.8rem;
+            padding: 1.1rem 1.3rem;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            border-left: 3px solid var(--accent2);
+        }
+
+        .mac-note-header {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--accent2);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.8rem;
+        }
+
+        .mac-steps {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .mac-steps li {
+            font-size: 0.76rem;
+            color: #555;
+            display: flex;
+            gap: 0.65rem;
+            line-height: 1.6;
+            font-weight: 300;
+        }
+
+        .step-num {
+            width: 16px;
+            height: 16px;
+            background: rgba(124, 77, 204, 0.1);
+            color: var(--accent2);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.6rem;
+            font-weight: 800;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        /* Features strip */
+        .features {
+            background: var(--ink);
+            color: white;
+            padding: 3.5rem 3rem;
+        }
+
+        .features-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .features-label {
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(245, 243, 238, 0.4);
+            font-weight: 500;
+            margin-bottom: 2.5rem;
+        }
+
+        .feature-icon {
+            font-size: 1.4rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+
+        .feature-title {
+            font-weight: 800;
+            font-size: 0.95rem;
+            margin-bottom: 0.4rem;
+            letter-spacing: -0.3px;
+        }
+
+        .feature-desc {
+            font-size: 0.78rem;
+            color: rgba(245, 243, 238, 0.45);
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        /* FOOTER */
+        footer {
+            text-align: center;
+            padding: 1.4rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.74rem;
+            color: var(--graydark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        footer a {
+            color: var(--graydark);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        footer a:hover {
+            color: var(--ink);
+        }
+
+        /* Animations on load */
+        .fade-up {
+            opacity: 0;
+            transform: translateY(16px);
+            animation: fadeUp 0.55s ease forwards;
+        }
+
+        .fade-up:nth-child(1) {
+            animation-delay: 0.05s;
+        }
+
+        .fade-up:nth-child(2) {
+            animation-delay: 0.12s;
+        }
+
+        .fade-up:nth-child(3) {
+            animation-delay: 0.19s;
+        }
+
+        .fade-up:nth-child(4) {
+            animation-delay: 0.26s;
+        }
+
+        .fade-up:nth-child(5) {
+            animation-delay: 0.33s;
+        }
+
+        .fade-up:nth-child(6) {
+            animation-delay: 0.40s;
+        }
+
+        .fade-up:nth-child(7) {
+            animation-delay: 0.47s;
+        }
+
+        @keyframes fadeUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            nav {
+                padding: 1.2rem 1.5rem;
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                padding: 2rem 1.5rem;
+                gap: 2.5rem;
+                min-height: auto;
+                padding-top: 3rem;
+                padding-bottom: 3rem;
+            }
+
+            .hero-right {
+                display: none;
+            }
+
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .features {
+                padding: 2.5rem 1.5rem;
+            }
+
+            .stats-row {
+                gap: 1.2rem;
+            }
+        }
+    </style>
 </head>
+
 <body>
-    <div class="glow-container">
-        <div class="glow-orb orb-1"></div>
-        <div class="glow-orb orb-2"></div>
-    </div>
 
-    <header>
-        <nav class="glass-nav">
-            <div class="logo">
-                <span class="logo-accent">Swift</span>ShareX
+    <nav style="background-color: var(--gray);">
+        <div class="logo">
+            <div class="logo-mark">
+                <img src="./assets/icon.png" alt="SwiftShareX" width="36" height="36" style="border-radius: 8px;" />
             </div>
-            <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#download" class="cta-nav">Download</a>
-            </div>
-        </nav>
-    </header>
+            SwiftShareX
+        </div>
+        <div class="nav-right">
+            <a href="https://github.com/mani5h-agarwal/SwiftShareX" class="nav-cta">GitHub →</a>
+        </div>
+    </nav>
 
-    <main>
-        <section class="hero">
-            <div class="hero-content">
-                <h1 class="animate-up">Share Files at <span class="gradient-text">Lightning Speed</span></h1>
-                <p class="animate-up delay-1">The ultra-fast, cross-platform local file sharing solution for Windows, macOS, and Android. No internet required.</p>
-                
-                <div class="download-group animate-up delay-2">
-                    <a href="#" id="download-win" class="download-btn primary">
-                        <i data-lucide="download"></i>
-                        <span>Download for Windows</span>
-                    </a>
-                    <a href="#" id="download-mac" class="download-btn secondary">
-                        <i data-lucide="apple"></i>
-                        <span>Download for macOS</span>
-                    </a>
+    <section class="hero">
+        <div class="hero-left">
+            <div class="eyebrow fade-up">
+                <div class="eyebrow-dot"></div>
+                No internet required
+            </div>
+
+            <h1 class="fade-up">
+                Local transfers,<br>
+                <span class="line2">zero friction.</span>
+            </h1>
+
+            <p class="hero-desc fade-up">
+                Share files across Windows, macOS &amp; Android over your local network. No cloud. No limits. No
+                waiting.
+            </p>
+            <div class="btns fade-up">
+                <a href="#" id="download-win" class="btn btn-primary loading">
+                    <img src="./assets/windows.svg" class="icon" style="filter: invert(1);" />
+                    Windows
+                </a>
+                <a href="#" id="download-mac" class="btn btn-secondary loading">
+                    <img src="./assets/apple.svg" class="icon" />
+                    macOS
+                </a>
+                <a href="https://play.google.com/store/apps/details?id=com.swiftshare&hl=en_IN" id="download-android"
+                    class="btn btn-secondary">
+                    <img src="./assets/android.svg" class="icon" />
+                    Android
+                </a>
+            </div>
+
+            <div class="stats-row fade-up">
+                <div class="stat">
+                    <div class="stat-num">~80 MB/s</div>
+                    <div class="stat-label">Transfer speed</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-num">0 MB</div>
+                    <div class="stat-label">Cloud used</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-num">3</div>
+                    <div class="stat-label">Platforms</div>
                 </div>
             </div>
-            <div class="hero-image animate-up delay-3">
-                <img src="assets/hero-mockup.png" alt="SwiftShareX Desktop Interface" class="mockup-img">
-                <div class="image-glow"></div>
-            </div>
-        </section>
+        </div>
 
-        <section id="features" class="features">
-            <div class="feature-card glass">
-                <div class="icon-wrap"><i data-lucide="zap"></i></div>
-                <h3>Blazing Fast</h3>
-                <p>Powered by Node.js TCP streams and Pure C++ for maximum throughput on your local network.</p>
-            </div>
-            <div class="feature-card glass">
-                <div class="icon-wrap"><i data-lucide="shield-check"></i></div>
-                <h3>Zero Internet</h3>
-                <p>Transfer files between devices without uploading to the cloud. Your data stays in your network.</p>
-            </div>
-            <div class="feature-card glass">
-                <div class="icon-wrap"><i data-lucide="monitor-smartphone"></i></div>
-                <h3>Cross Platform</h3>
-                <p>Full parity between Desktop and Mobile. Seamless discovery across all your devices.</p>
-            </div>
-        </section>
+        <div class="hero-right">
+            <div class="demo-window">
+                <div class="demo-titlebar">
+                    <div class="traffic-light tl-r"></div>
+                    <div class="traffic-light tl-y"></div>
+                    <div class="traffic-light tl-g"></div>
+                    <span class="demo-title-text">SwiftShareX</span>
+                </div>
+                <div class="demo-body">
+                    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                        <div class="device-card send">
+                            <div class="avatar">M</div>
+                            <div class="device-info">
+                                <div class="device-name">My MacBook</div>
+                                <div class="device-ip">192.168.1.5 · Sender</div>
+                            </div>
+                            <div class="tag">Send</div>
+                        </div>
 
-        <section class="how-it-works">
-            <h2 class="animate-up">How it Works</h2>
-            <div class="steps">
-                <div class="step glass">
-                    <span class="step-num">01</span>
-                    <h4>Connect</h4>
-                    <p>Open SwiftShareX on both devices. They'll find each other automatically via UDP discovery.</p>
-                </div>
-                <div class="step glass">
-                    <span class="step-num">02</span>
-                    <h4>Select</h4>
-                    <p>Drop your files or folders into the interface. No limits on file size or type.</p>
-                </div>
-                <div class="step glass">
-                    <span class="step-num">03</span>
-                    <h4>Swift</h4>
-                    <p>Watch as your files move at the speed of your hardware. Securely, locally, and instantly.</p>
+                        <div class="transfer-section">
+                            <div class="transfer-info">
+                                <span class="transfer-filename">project-assets.zip</span>
+                                <span class="transfer-speed">↑ 80 MB/s</span>
+                            </div>
+                            <div class="track">
+                                <div class="fill"></div>
+                            </div>
+                            <div class="transfer-meta">
+                                <span>2.4 GB of 3.1 GB</span>
+                                <span>~11s remaining</span>
+                            </div>
+                        </div>
+
+                        <div class="device-card recv">
+                            <div class="avatar">A</div>
+                            <div class="device-info">
+                                <div class="device-name">My Phone</div>
+                                <div class="device-ip">192.168.1.11 · Receiver</div>
+                            </div>
+                            <div class="tag">Receive</div>
+                        </div>
+                    </div>
+
+                    <div class="mac-note fade-up">
+                        <div class="mac-note-header">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4M12 8h.01" />
+                            </svg>
+                            macOS — First launch setup
+                        </div>
+                        <ul class="mac-steps">
+                            <li>
+                                <div class="step-num">1</div> Open the <strong>.dmg</strong> and drag SwiftShareX to
+                                Applications.
+                            </li>
+                            <li>
+                                <div class="step-num">2</div> Launch it — macOS will block it. Click
+                                <strong>Done</strong>.
+                            </li>
+                            <li>
+                                <div class="step-num">3</div> Go to <strong>System Settings → Privacy &amp;
+                                    Security</strong>.
+                            </li>
+                            <li>
+                                <div class="step-num">4</div> Scroll down and click <strong>Open Anyway</strong> next to
+                                SwiftShareX.
+                            </li>
+                            <li>
+                                <div class="step-num">5</div> Confirm with <strong>Open</strong>. You're all set!
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <section id="download" class="final-cta">
-            <div class="glass-cta">
-                <h2>Ready to Share?</h2>
-                <p>Get started with the fastest local file sharing app on the planet.</p>
-                <div class="download-group">
-                    <a href="#" id="download-win-footer" class="download-btn primary">Windows</a>
-                    <a href="#" id="download-mac-footer" class="download-btn secondary">macOS</a>
-                </div>
-            </div>
-        </section>
-    </main>
-    </main>
-
-    <footer>
-        <p>&copy; 2026 SwiftShareX. Built with speed in mind.</p>
+    <footer style="background-color: var(--gray);">
+        <span>&copy; 2026 SwiftShareX</span>
+        <span style="opacity:0.3;">·</span>
+        <a href="https://github.com/mani5h-agarwal/SwiftShareX">Open source on GitHub</a>
+        <span style="opacity:0.3;">·</span>
+        <span>Built with speed in mind.</span>
     </footer>
 
     <script>
-        lucide.createIcons();
+        const GITHUB_REPO = 'mani5h-agarwal/SwiftShareX';
+        const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases/latest`;
 
-        // Dynamically fetch latest release from GitHub
         async function fetchLatestRelease() {
-            const owner = 'mani5h-agarwal'; 
-            const repo = 'SwiftShareX'; 
-            
+            const winBtn = document.getElementById('download-win');
+            const macBtn = document.getElementById('download-mac');
+
             try {
-                const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
-                if (!response.ok) {
-                    console.warn("No public release found. Make sure to publish the draft on GitHub!");
-                    return;
-                }
-                const data = await response.json();
-                
-                if (data.assets) {
-                    const winAsset = data.assets.find(a => a.name.endsWith('.exe'));
-                    const macAsset = data.assets.find(a => a.name.endsWith('.dmg'));
-                    
-                    if (winAsset) {
-                        document.getElementById('download-win').href = winAsset.browser_download_url;
-                        document.getElementById('download-win-footer').href = winAsset.browser_download_url;
-                    }
-                    if (macAsset) {
-                        document.getElementById('download-mac').href = macAsset.browser_download_url;
-                        document.getElementById('download-mac-footer').href = macAsset.browser_download_url;
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to fetch release links", e);
+                const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
+                if (!res.ok) throw new Error('GitHub API error');
+
+                const data = await res.json();
+                const assets = data.assets ?? [];
+
+                const winAsset = assets.find(a => a.name.endsWith('.exe'));
+                const macAsset = assets.find(a => a.name.endsWith('.dmg'));
+                const apkAsset = assets.find(a => a.name.endsWith('.apk'));
+
+                // Windows
+                winBtn.href = winAsset ? winAsset.browser_download_url : RELEASES_URL;
+                winBtn.classList.remove('loading');
+
+                // macOS
+                macBtn.href = macAsset ? macAsset.browser_download_url : RELEASES_URL;
+                macBtn.classList.remove('loading');
+
+                // Android — fall back to releases page if no APK asset
+                const apkBtn = document.getElementById('download-android');
+                apkBtn.href = apkAsset ? apkAsset.browser_download_url : RELEASES_URL;
+
+            } catch (err) {
+                // On failure, point all buttons to the releases page
+                [winBtn, macBtn].forEach(btn => {
+                    btn.href = RELEASES_URL;
+                    btn.classList.remove('loading');
+                });
             }
         }
 
         fetchLatestRelease();
     </script>
 </body>
+
 </html>
