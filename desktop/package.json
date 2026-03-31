@@ -1,7 +1,11 @@
 {
   "name": "desktop",
   "version": "1.0.0",
-  "description": "",
+  "description": "Ultra-fast local file sharing",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mani5h-agarwal/SwiftShareX.git"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
