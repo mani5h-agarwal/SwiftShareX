@@ -1,6 +1,6 @@
 {
   "name": "swiftsharex",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Ultra-fast cross-platform file sharing for Windows, macOS & Android",
   "private": true,
   "scripts": {

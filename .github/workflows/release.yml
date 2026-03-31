@@ -44,8 +44,8 @@ jobs:
           # Note: electron-builder automatically handles uploading to GitHub Releases
           # if a GITHUB_TOKEN is present and the repository is hosted on GitHub.
           if [ "$RUNNER_OS" == "macOS" ]; then
-            npm run build:app -- --mac
+            npm run build:app -- --mac -p always
           else
-            npm run build:app -- --win
+            npm run build:app -- --win -p always
           fi
         shell: bash
