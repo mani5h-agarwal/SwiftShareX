@@ -7,6 +7,7 @@ import {
   Linking,
   Platform,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RoleButton from '../components/RoleButton';
@@ -90,6 +91,8 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
       );
     }
   };
+ 
+  const isDesktop = Platform.OS === 'web' || !!(globalThis as any).swiftshareIPC;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,6 +116,13 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
           title="View All Files"
           subtitle="Saved in SwiftShareX folder"
           onPress={openSwiftShareXFolder}
+        />
+        <View style={{ height: 12 }} />
+        <ActionRow
+          icon="🌐"
+          title={isDesktop ? 'Get Mobile App' : 'Get Desktop App'}
+          subtitle={isDesktop ? 'For Android' : 'For Windows & macOS'}
+          onPress={() => Linking.openURL('https://mani5h-agarwal.github.io/SwiftShareX/')}
         />
       </View>
 
@@ -164,7 +174,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -40,
+    marginTop: -25,
   },
   prompt: {
     fontSize: 20,

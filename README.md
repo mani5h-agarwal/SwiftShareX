@@ -1,8 +1,17 @@
 # SwiftShareX 🚀
 
-**Blazing fast, file sharing for Android.**
+**Blazing fast, cross-platform file sharing for Windows, macOS & Android.**
 
-SwiftShareX is the next-generation file transfer app, built with React Native and powered by a C++ TCP engine for maximum speed. Share files of any size (even multi-GB) at up to **50MB/s** on 5GHz Wi-Fi, with a beautiful, modern UI and zero data collection.
+SwiftShareX is a high-performance file transfer application built with **React Native** and powered by a custom **C++ TCP engine**. It allows you to share files of any size (even multi-GB) over your local Wi-Fi or hotspot at speeds up to **80MB/s**—no internet required and zero data collection.
+
+---
+
+## 📥 Downloads
+
+Get the latest version of SwiftShareX for all your devices:
+
+- **🌐 [Official Website](https://mani5h-agarwal.github.io/SwiftShareX/)** (Recommended)
+- **📦 [GitHub Releases](https://github.com/mani5h-agarwal/SwiftShareX/releases/latest)**
 
 ---
 
@@ -35,97 +44,74 @@ SwiftShareX is the next-generation file transfer app, built with React Native an
 
 ## ✨ Key Features
 
-- **🚀 Ultra-fast Transfers**: Up to 50MB/s on 5GHz Wi-Fi
-- **📂 No File Size Limit**: Send and receive files of any size, even multi-GB
-- **🔌 100% Offline**: Works over local Wi-Fi or hotspot, no internet needed
-- **🔒 Private & Secure**: No data collection, no cloud, direct device-to-device
-- **⚡ C++ TCP Engine**: All transfer logic is native C++ for maximum speed
-- **📱 Modern UI**: Animated, intuitive, and beautiful interface
-- **🔍 Instant Device Discovery**: Find nearby devices in seconds
-- **🗂️ All File Types**: Share photos, videos, documents, and more
-- **🛡️ End-to-end encrypted**: Your files never leave your devices
+- **🚀 Ultra-fast Transfers**: Optimized TCP engine hitting up to **80MB/s** on 5GHz Wi-Fi.
+- **📂 No File Size Limit**: Send and receive multi-GB files without compression or limits.
+- **🔌 100% Offline**: Works over local networks or mobile hotspots—no mobile data used.
+- **🔒 Private & Secure**: Zero data collection, no cloud intermediary, direct device-to-device.
+- **⚡ C++ Core**: All transfer logic is written in native C++ for maximum throughput.
+- **📱 Modern UI**: A clean, animated interface built for mobile and desktop.
+- **🔍 Instant Discovery**: Find nearby devices automatically using UDP broadcasts.
+- **🛡️ End-to-End**: Your files never leave your local network.
+
+---
+
+## 🍏 macOS — First Launch Setup
+
+> [!IMPORTANT]
+> Because SwiftShareX is a community-built application, macOS will block it on the first launch. Follow these steps to open it:
+
+1.  Open the **.dmg** and drag SwiftShareX to **Applications**.
+2.  Launch it — macOS will show a security warning. Click **Done**.
+3.  Go to **System Settings → Privacy & Security**.
+4.  Scroll down to the "Security" section and click **Open Anyway** next to SwiftShareX.
+5.  Confirm with **Open**. You're all set!
 
 ---
 
 ## 🏗️ Architecture Overview
 
-- **React Native** for cross-platform UI (Android & iOS)
-- **C++ TCP/UDP Engine** for all file transfer logic (native module)
-- **Modular Components**: DeviceCard, FileItemComponent, RoleButton, ActionRow, TabBar, etc.
-- **Screens**: ChooseRole, DevicePicker, Session (Send/Receive)
-- **Custom Hooks**: Device info, file utilities
-- **Native Modules**: For file system, device info, UDP/TCP sockets
-- **No file size limits**: Optimized for large files and high throughput
-- **Files saved in**: `Downloads/SwiftShareX` (Android)
+SwiftShareX uses a modern, high-performance stack:
 
----
-
-## 📊 Performance
-
-- **Speed**: Up to 50MB/s on 5GHz Wi-Fi
-- **File Size**: Tested with files of several GBs
-- **No artificial limits**: Transfer as much as your device/network allows
-
----
-
-## 🔐 Privacy & Security
-
-- **Zero Data Collection**: No analytics, no tracking, no ads
-- **Direct Connection**: Device-to-device, never via cloud
-- **End-to-end encrypted**: All transfers are private
+- **React Native**: Cross-platform UI for Android and iOS.
+- **Electron**: Powers the Desktop experience for Windows and macOS.
+- **C++ TCP/UDP Engine**: A custom native module (via JSI) that handles all high-speed socket logic.
+- **GitHub Actions**: Automated CI/CD pipeline that builds and releases the app for all platforms on every version tag (`v*`).
 
 ---
 
 ## 🛠️ How It Works
 
-1. **Connect to Wi-Fi**: Both devices join the same Wi-Fi or hotspot
-2. **Open SwiftShareX**: Choose Send or Receive
-3. **Device Discovery**: Instantly find nearby devices
-5. **Select Files**: Pick any files, any size
-6. **Transfer**: Enjoy lightning-fast, direct transfers
-
----
-
-## 📖 Usage Guide
-
-### Setting Up
-
-1. Install SwiftShareX on both devices
-2. Connect both to the same Wi-Fi or hotspot
-3. Open the app and choose your role (Send/Receive)
-4. Pair devices using QR code
-
-### Sharing Files
-
-1. Tap "Select Files" to pick files
-2. Tap "Send" to start transfer
-3. Monitor real-time progress
-4. Files are saved in the SwiftShareX folder
-
----
-
-## 👥 Who Is It For?
-
-- **Students**: Share notes, assignments, and media
-- **Professionals**: Transfer large work files securely
-- **Friends & Family**: Share photos, videos, and memories
-- **Anyone**: Who values speed, privacy, and simplicity
+1.  **Connect**: Ensure both devices are on the same Wi-Fi or one is on a hotspot.
+2.  **Open**: Launch SwiftShareX on both devices and choose **Send** or **Receive**.
+3.  **Discover**: Nearby devices appear instantly on the screen.
+4.  **Transfer**: Select your files and watch them fly!
 
 ---
 
 ## 📱 System Requirements
 
-- **Platform**: Android 6.0+
-- **Network**: Wi-Fi or hotspot
+- **Android**: Android 6.0 (API 23) or higher.
+- **Windows**: Windows 10 (1903) or higher.
+- **macOS**: macOS 10.15 (Catalina) or higher.
+- **Hardware**: A Wi-Fi adapter is required.
 
 ---
 
 ## 🧩 Project Structure
 
-- `App.tsx` — Main app logic, state, and navigation
-- `src/screens/` — ChooseRole, DevicePicker, Session
-- `src/components/` — UI components (DeviceCard, FileItem, etc.)
-- `src/utils/` — File utilities
-- `src/hooks/` — Custom hooks
-- `src/modals/` — Modals for confirmations
-- `src/assets/` — Images, icons, etc.
+- `App.tsx` — Main application logic and state management.
+- `desktop/` — Electron integration for Windows and macOS.
+- `src/screens/` — ChooseRole, DevicePicker, and Session screens.
+- `src/components/` — UI components like `RoleButton` and `ActionRow`.
+- `docs/` — Source for the official landing page.
+- `.github/workflows/` — Release automation scripts.
+
+---
+
+## 👥 Privacy
+
+SwiftShareX values your privacy. We do not track you, collect your data, or require an account. Everything happens locally on your own network.
+
+---
+
+&copy; 2026 SwiftShareX 🚀

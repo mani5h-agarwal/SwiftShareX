@@ -1,6 +1,7 @@
 {
-  "name": "SwiftShare",
-  "version": "0.0.1",
+  "name": "swiftsharex",
+  "version": "1.0.0",
+  "description": "Ultra-fast cross-platform file sharing for Windows, macOS & Android",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
