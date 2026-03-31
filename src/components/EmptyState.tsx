@@ -60,8 +60,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
   },
   iconImage: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     tintColor: '#804DCC',
     opacity: 0.7,
   },

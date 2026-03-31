@@ -143,8 +143,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   iconImage: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     tintColor: '#fff',
   },
   buttonTitle: {
