@@ -117,7 +117,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
           subtitle="Saved in SwiftShareX folder"
           onPress={openSwiftShareXFolder}
         />
-        <View style={{ height: 12 }} />
+        <View style={{ height: 10 }} />
         <ActionRow
           icon="🌐"
           title={isDesktop ? 'Get Mobile App' : 'Get Desktop App'}

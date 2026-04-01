@@ -9,6 +9,7 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap"
         rel="stylesheet">
     <style>
+        /* ── DESIGN TOKENS ── */
         :root {
             --ink: #0c0c0f;
             --gray: #f4f4f4;
@@ -17,9 +18,23 @@
             --graydark: #888888;
             --border: rgba(12, 12, 15, 0.1);
             --card-bg: #ffffff;
+
+            /* Toggle-specific tokens */
+            --toggle-track-bg: rgba(12, 12, 15, 0.05);
+            --toggle-track-radius: 999px;
+            --toggle-pad: 3px;
+            --toggle-gap: 2px;
+            --toggle-btn-radius: 999px;
+            --toggle-active-bg: var(--accent2);
+            --toggle-active-color: #fff;
+            --toggle-idle-color: rgba(12, 12, 15, 0.2);
+            --toggle-font-size: 0.65rem;
+            --toggle-font-weight: 700;
+            --toggle-letter-spacing: 0.05em;
         }
 
-        * {
+        /* ── RESET ── */
+        *, *::before, *::after {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -40,7 +55,33 @@
             flex-direction: column;
         }
 
-        /* NAV */
+        /* ── PARTICLE CANVAS ── */
+        #particle-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.35;
+        }
+
+        /* ── CURSOR GLOW ── */
+        .cursor-glow {
+            position: fixed;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1;
+            background: radial-gradient(circle, rgba(232, 82, 42, 0.12) 0%, rgba(124, 77, 204, 0.07) 50%, transparent 70%);
+            transform: translate(-50%, -50%);
+            transition: opacity 0.3s;
+            mix-blend-mode: multiply;
+        }
+
+        /* ── NAV ── */
         nav {
             display: flex;
             justify-content: space-between;
@@ -49,9 +90,15 @@
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
-            background: rgba(245, 243, 238, 0.85);
+            background: rgba(244, 244, 244, 0.85);
             backdrop-filter: blur(12px);
             z-index: 100;
+            animation: navSlideDown 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes navSlideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to   { transform: translateY(0);     opacity: 1; }
         }
 
         .logo {
@@ -71,7 +118,19 @@
             justify-content: center;
         }
 
+        .logo-mark img {
+            border-radius: 8px;
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .logo:hover .logo-mark img {
+            transform: rotate(360deg) scale(1.15);
+        }
+
         .nav-cta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             font-weight: 700;
             font-size: 0.78rem;
             padding: 0.5rem 1rem;
@@ -80,15 +139,24 @@
             border-radius: 8px;
             text-decoration: none;
             letter-spacing: 0.02em;
+            position: relative;
+            overflow: hidden;
             transition: background 0.2s, transform 0.15s;
         }
 
-        .nav-cta:hover {
-            background: var(--accent);
-            transform: translateY(-1px);
+        .nav-cta::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.4s ease;
         }
 
-        /* HERO */
+        .nav-cta:hover::after { transform: translateX(100%); }
+        .nav-cta:hover { background: var(--accent); transform: translateY(-1px); }
+
+        /* ── HERO LAYOUT ── */
         .hero {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -98,12 +166,15 @@
             gap: 5rem;
             align-items: center;
             flex: 1;
+            position: relative;
+            z-index: 2;
         }
 
         .hero-left {
             padding: 3rem 0;
         }
 
+        /* ── EYEBROW ── */
         .eyebrow {
             display: inline-flex;
             align-items: center;
@@ -114,10 +185,16 @@
             text-transform: uppercase;
             color: var(--accent2);
             background: rgba(234, 222, 255, 0.2);
-            border: 1px solid rgb(124 77 204 / 0.9);
+            border: 1px solid rgba(124, 77, 204, 0.9);
             padding: 0.3rem 0.75rem;
             border-radius: 999px;
             margin-bottom: 1.5rem;
+            animation: eyebrowPop 0.7s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @keyframes eyebrowPop {
+            from { transform: scale(0.6) translateY(10px); opacity: 0; }
+            to   { transform: scale(1) translateY(0);      opacity: 1; }
         }
 
         .eyebrow-dot {
@@ -129,32 +206,51 @@
         }
 
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.4;
-                transform: scale(0.7);
-            }
+            0%, 100% { opacity: 1; transform: scale(1);   }
+            50%       { opacity: 0.4; transform: scale(0.7); }
         }
 
+        /* ── HEADING ── */
         h1 {
             font-size: clamp(2.8rem, 5vw, 4rem);
             font-weight: 800;
             letter-spacing: -2.5px;
             line-height: 1.02;
             margin-bottom: 1.4rem;
+            overflow: hidden;
+        }
+
+        .word {
+            display: inline-block;
+            animation: wordRise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .word:nth-child(1) { animation-delay: 0.4s; }
+        .word:nth-child(2) { animation-delay: 0.5s; }
+        .word:nth-child(3) { animation-delay: 0.6s; }
+        .word:nth-child(4) { animation-delay: 0.7s; }
+
+        @keyframes wordRise {
+            from { transform: translateY(60px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
         }
 
         h1 .line2 {
             display: block;
             color: var(--accent);
+            background: linear-gradient(90deg, var(--accent) 0%, #ff8a5b 40%, var(--accent) 80%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: shimmer 3s linear 1.2s infinite;
         }
 
+        @keyframes shimmer {
+            from { background-position: 200% center; }
+            to   { background-position: -200% center; }
+        }
+
+        /* ── HERO DESCRIPTION ── */
         .hero-desc {
             font-size: 1rem;
             line-height: 1.75;
@@ -162,6 +258,12 @@
             font-weight: 300;
             max-width: 360px;
             margin-bottom: 2.2rem;
+            animation: fadeSlideUp 0.7s 0.75s ease both;
+        }
+
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0);    }
         }
 
         .icon {
@@ -170,12 +272,13 @@
             opacity: 0.7;
         }
 
-        /* Download buttons */
+        /* ── DOWNLOAD BUTTONS ── */
         .btns {
             display: flex;
             gap: 0.6rem;
             flex-wrap: wrap;
             margin-bottom: 2rem;
+            animation: fadeSlideUp 0.7s 0.9s ease both;
         }
 
         .btn {
@@ -190,12 +293,49 @@
             text-decoration: none;
             cursor: pointer;
             border: none;
-            transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        box-shadow 0.2s,
+                        opacity 0.2s;
             letter-spacing: 0.01em;
+            position: relative;
+            overflow: hidden;
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
+        /* Ripple */
+        .btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: radial-gradient(circle at center, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+            opacity: 0;
+            transform: scale(0);
+            transition: transform 0.4s ease, opacity 0.4s ease;
+        }
+
+        .btn:active::before {
+            transform: scale(2);
+            opacity: 1;
+            transition: none;
+        }
+
+        /* Shine sweep */
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.45s ease;
+        }
+
+        .btn:hover::after  { transform: translateX(100%); }
+        .btn:hover         { transform: translateY(-3px) scale(1.03); }
+        .btn:active        { transform: translateY(0) scale(0.97); }
+
+        .btn.loading {
+            opacity: 0.5;
+            pointer-events: none;
         }
 
         .btn-primary {
@@ -205,7 +345,7 @@
         }
 
         .btn-primary:hover {
-            box-shadow: 0 8px 24px rgba(12, 12, 15, 0.25);
+            box-shadow: 0 12px 28px rgba(12, 12, 15, 0.3);
         }
 
         .btn-secondary {
@@ -219,37 +359,24 @@
             background: #fff;
         }
 
-        /* Loading state */
-        .btn.loading {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        .btn-icon {
-            font-size: 1rem;
-            line-height: 1;
-        }
-
-        /* Stats row */
+        /* ── STATS ROW ── */
         .stats-row {
             display: flex;
             gap: 1.8rem;
             padding-top: 1.5rem;
             border-top: 1px solid var(--border);
+            animation: fadeSlideUp 0.7s 1.05s ease both;
         }
 
         .stat-num {
             font-weight: 500;
             font-size: 1.2rem;
-            /* letter-spacing: ; */
             color: var(--ink);
             line-height: 1;
             margin-bottom: 0.2rem;
         }
 
-        .stat-num span {
-            color: var(--accent);
-        }
+        .stat-num span { color: var(--accent); }
 
         .stat-label {
             font-size: 0.72rem;
@@ -257,18 +384,38 @@
             letter-spacing: 0.02em;
         }
 
-        /* HERO RIGHT — Demo UI */
+        /* ── HERO RIGHT ── */
         .hero-right {
             position: relative;
             padding: 2rem 0;
+            animation: heroRightEntry 0.9s 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
+        @keyframes heroRightEntry {
+            from { opacity: 0; transform: translateX(50px); }
+            to   { opacity: 1; transform: translateX(0);    }
+        }
+
+        /* ── DEMO WINDOW ── */
         .demo-window {
             background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 20px;
             overflow: hidden;
             box-shadow: 0 4px 0 0 rgba(12, 12, 15, 0.08), 0 20px 60px rgba(12, 12, 15, 0.08);
+            animation: cardFloat 4s ease-in-out 1.5s infinite alternate;
+            transform-origin: center bottom;
+        }
+
+        @keyframes cardFloat {
+            from {
+                transform: translateY(0px) rotate(0deg);
+                box-shadow: 0 4px 0 0 rgba(12, 12, 15, 0.08), 0 20px 60px rgba(12, 12, 15, 0.08);
+            }
+            to {
+                transform: translateY(-10px) rotate(0.3deg);
+                box-shadow: 0 4px 0 0 rgba(12, 12, 15, 0.05), 0 32px 80px rgba(12, 12, 15, 0.13);
+            }
         }
 
         .demo-titlebar {
@@ -284,19 +431,14 @@
             width: 11px;
             height: 11px;
             border-radius: 50%;
+            transition: transform 0.2s;
         }
 
-        .tl-r {
-            background: #ff5f57;
-        }
+        .demo-titlebar:hover .traffic-light { transform: scale(1.3); }
 
-        .tl-y {
-            background: #febc2e;
-        }
-
-        .tl-g {
-            background: #28c840;
-        }
+        .tl-r { background: #ff5f57; }
+        .tl-y { background: #febc2e; }
+        .tl-g { background: #28c840; }
 
         .demo-title-text {
             font-size: 0.72rem;
@@ -309,6 +451,13 @@
             padding: 1.2rem;
         }
 
+        /* ── DEVICE CARDS ── */
+        .device-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
         .device-card {
             border: 1px solid var(--border);
             border-radius: 14px;
@@ -317,6 +466,12 @@
             align-items: center;
             gap: 0.85rem;
             background: #fafaf8;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+        }
+
+        .device-card:hover {
+            transform: scale(1.025) translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
         }
 
         .device-card.send {
@@ -339,21 +494,15 @@
             font-weight: 800;
             font-size: 1rem;
             flex-shrink: 0;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        .device-card.send .avatar {
-            background: rgba(232, 82, 42, 0.1);
-            color: var(--accent);
-        }
+        .device-card:hover .avatar { transform: rotate(-10deg) scale(1.15); }
 
-        .device-card.recv .avatar {
-            background: rgba(124, 77, 204, 0.1);
-            color: var(--accent2);
-        }
+        .device-card.send .avatar { background: rgba(232, 82, 42, 0.1); color: var(--accent); }
+        .device-card.recv .avatar { background: rgba(124, 77, 204, 0.1); color: var(--accent2); }
 
-        .device-info {
-            flex: 1;
-        }
+        .device-info { flex: 1; }
 
         .device-name {
             font-size: 0.85rem;
@@ -377,16 +526,10 @@
             border-radius: 999px;
         }
 
-        .device-card.send .tag {
-            background: rgba(232, 82, 42, 0.1);
-            color: var(--accent);
-        }
+        .device-card.send .tag { background: rgba(232, 82, 42, 0.1); color: var(--accent); }
+        .device-card.recv .tag { background: rgba(124, 77, 204, 0.1); color: var(--accent2); }
 
-        .device-card.recv .tag {
-            background: rgba(124, 77, 204, 0.1);
-            color: var(--accent2);
-        }
-
+        /* ── TRANSFER BAR ── */
         .transfer-section {
             padding: 0.8rem 0.5rem;
         }
@@ -407,6 +550,12 @@
         .transfer-speed {
             font-size: 0.72rem;
             font-weight: 700;
+            animation: speedPulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes speedPulse {
+            0%, 100% { opacity: 1;   }
+            50%       { opacity: 0.5; }
         }
 
         .track {
@@ -421,35 +570,22 @@
             height: 100%;
             width: 0%;
             border-radius: 99px;
-            background: var(--accent);
-            animation: xfer 2.8s ease-in-out infinite;
+            background: linear-gradient(90deg, var(--accent), #ff8a5b, var(--accent2));
+            background-size: 200% 100%;
+            animation: xfer 2.8s ease-in-out infinite, gradientShift 1.5s linear infinite;
         }
 
         @keyframes xfer {
-            0% {
-                width: 0%;
-                opacity: 1;
-            }
+            0%   { width: 0%;   opacity: 1; }
+            65%  { width: 100%; opacity: 1; }
+            80%  { width: 100%; opacity: 0; }
+            81%  { width: 0%;   opacity: 0; }
+            100% { width: 0%;   opacity: 1; }
+        }
 
-            65% {
-                width: 100%;
-                opacity: 1;
-            }
-
-            80% {
-                width: 100%;
-                opacity: 0;
-            }
-
-            81% {
-                width: 0%;
-                opacity: 0;
-            }
-
-            100% {
-                width: 0%;
-                opacity: 1;
-            }
+        @keyframes gradientShift {
+            0%   { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
         }
 
         .transfer-meta {
@@ -459,7 +595,74 @@
             color: var(--graydark);
         }
 
-        /* macOS note */
+        /* ════════════════════════════════════════════════════════
+           ── PLATFORM TOGGLE (fully refactored) ──
+           ════════════════════════════════════════════════════════ */
+        .platform-toggle {
+            /* pill track */
+            display: inline-flex;
+            align-items: center;
+            gap: var(--toggle-gap);
+            padding: var(--toggle-pad);
+            padding-left: 4px;
+            padding-right: 4px;
+            background: var(--toggle-track-bg);
+            border-radius: var(--toggle-track-radius);
+        }
+
+        .platform-toggle__btn {
+            /* reset */
+            border: none;
+            outline: none;
+            background: transparent;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+
+            /* sizing */
+            padding: 0.28rem 0.75rem;
+            border-radius: var(--toggle-btn-radius);
+
+            /* text */
+            font-size: var(--toggle-font-size);
+            font-weight: var(--toggle-font-weight);
+            letter-spacing: var(--toggle-letter-spacing);
+            text-transform: uppercase;
+            color: var(--toggle-idle-color);
+
+            /* smooth all transitions */
+            transition:
+                background  0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+                color       0.2s  ease,
+                transform   0.2s  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+            /* ensure it sits above the track's inset shadow */
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Hover idle state — light nudge */
+        .platform-toggle__btn:not([data-active="true"]):hover {
+            color: rgba(0, 0, 0, 0.3);
+            background: rgba(12, 12, 15, 0.055);
+            transform: scale(1.02);
+        }
+
+        /* Active / selected state */
+        .platform-toggle__btn[data-active="true"] {
+            background: rgba(255, 255, 255, 1);
+            color: var(--accent2);
+
+            /* tiny pop-in scale */
+            transform: scale(1.06);
+        }
+
+        /* Focus-visible ring for accessibility */
+        .platform-toggle__btn:focus-visible {
+            outline: 2px solid var(--accent2);
+            outline-offset: 2px;
+        }
+
+        /* ── MAC NOTE CARD ── */
         .mac-note {
             margin-top: 1.8rem;
             padding: 1.1rem 1.3rem;
@@ -467,9 +670,24 @@
             border: 1px solid var(--border);
             border-radius: 16px;
             border-left: 3px solid var(--accent2);
+            transition: box-shadow 0.2s, transform 0.2s;
         }
 
+        .mac-note:hover {
+            box-shadow: 0 8px 30px rgba(124, 77, 204, 0.1);
+            transform: translateX(4px);
+        }
+
+        /* ── NOTE HEADER ── */
         .mac-note-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.45rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .mac-note-header__label {
             display: flex;
             align-items: center;
             gap: 0.45rem;
@@ -478,14 +696,32 @@
             color: var(--accent2);
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            margin-bottom: 0.8rem;
+        }
+
+        /* ── STEP LIST (STACKED) ── */
+        .mac-steps-stack {
+            display: grid;
+            grid-template-columns: 1fr;
         }
 
         .mac-steps {
+            grid-area: 1 / 1;
             list-style: none;
             display: flex;
             flex-direction: column;
             gap: 0.35rem;
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+        }
+
+        /* slide-in when switching tabs */
+        .mac-steps[style*="visibility: visible"],
+        .mac-steps:not([style*="visibility: hidden"]) {
+            animation: stepsReveal 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes stepsReveal {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0);   }
         }
 
         .mac-steps li {
@@ -495,7 +731,16 @@
             gap: 0.65rem;
             line-height: 1.6;
             font-weight: 300;
+            opacity: 0; /* start hidden so the animation is always visible */
+            animation: fadeSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
+
+        /* Delays are relative to when the parent .mac-steps animates in (~0.3s) */
+        .mac-steps li:nth-child(1) { animation-delay: 0.1s; }
+        .mac-steps li:nth-child(2) { animation-delay: 0.2s; }
+        .mac-steps li:nth-child(3) { animation-delay: 0.3s; }
+        .mac-steps li:nth-child(4) { animation-delay: 0.4s; }
+        .mac-steps li:nth-child(5) { animation-delay: 0.5s; }
 
         .step-num {
             width: 16px;
@@ -510,50 +755,47 @@
             font-weight: 800;
             flex-shrink: 0;
             margin-top: 2px;
+            transition: background 0.2s, transform 0.2s;
         }
 
-        /* Features strip */
-        .features {
-            background: var(--ink);
+        .mac-steps li:hover .step-num {
+            background: var(--accent2);
             color: white;
-            padding: 3.5rem 3rem;
+            transform: scale(1.2) rotate(-8deg);
         }
 
-        .features-inner {
-            max-width: 1100px;
-            margin: 0 auto;
+        /* ── GLOW ORBS ── */
+        .hero-orb {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
         }
 
-        .features-label {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: rgba(245, 243, 238, 0.4);
-            font-weight: 500;
-            margin-bottom: 2.5rem;
+        .hero-orb-1 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(232, 82, 42, 0.08) 0%, transparent 70%);
+            top: -100px;
+            right: -100px;
+            animation: orbDrift 7s ease-in-out infinite alternate;
         }
 
-        .feature-icon {
-            font-size: 1.4rem;
-            margin-bottom: 0.75rem;
-            display: block;
+        .hero-orb-2 {
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(124, 77, 204, 0.09) 0%, transparent 70%);
+            bottom: 0;
+            left: -80px;
+            animation: orbDrift 9s ease-in-out infinite alternate-reverse;
         }
 
-        .feature-title {
-            font-weight: 800;
-            font-size: 0.95rem;
-            margin-bottom: 0.4rem;
-            letter-spacing: -0.3px;
+        @keyframes orbDrift {
+            from { transform: translate(0, 0); }
+            to   { transform: translate(20px, 20px); }
         }
 
-        .feature-desc {
-            font-size: 0.78rem;
-            color: rgba(245, 243, 238, 0.45);
-            line-height: 1.7;
-            font-weight: 300;
-        }
-
-        /* FOOTER */
+        /* ── FOOTER ── */
         footer {
             text-align: center;
             padding: 1.4rem;
@@ -564,64 +806,49 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            position: relative;
+            z-index: 2;
+            background-color: var(--gray);
         }
 
         footer a {
             color: var(--graydark);
             text-decoration: none;
             transition: color 0.2s;
+            position: relative;
         }
 
-        footer a:hover {
-            color: var(--ink);
+        footer a::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--accent);
+            transform: scaleX(0);
+            transition: transform 0.25s ease;
+            transform-origin: left;
         }
 
-        /* Animations on load */
-        .fade-up {
+        footer a:hover::after { transform: scaleX(1); }
+        footer a:hover { color: var(--ink); }
+
+        /* ── SCROLL REVEAL ── */
+        .reveal {
             opacity: 0;
-            transform: translateY(16px);
-            animation: fadeUp 0.55s ease forwards;
+            transform: translateY(24px);
+            transition: opacity 0.65s ease, transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
-        .fade-up:nth-child(1) {
-            animation-delay: 0.05s;
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
-        .fade-up:nth-child(2) {
-            animation-delay: 0.12s;
-        }
-
-        .fade-up:nth-child(3) {
-            animation-delay: 0.19s;
-        }
-
-        .fade-up:nth-child(4) {
-            animation-delay: 0.26s;
-        }
-
-        .fade-up:nth-child(5) {
-            animation-delay: 0.33s;
-        }
-
-        .fade-up:nth-child(6) {
-            animation-delay: 0.40s;
-        }
-
-        .fade-up:nth-child(7) {
-            animation-delay: 0.47s;
-        }
-
-        @keyframes fadeUp {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
+        /* ── MOBILE ── */
         @media (max-width: 768px) {
-            nav {
-                padding: 1.2rem 1.25rem;
-            }
+            nav { padding: 1.2rem 1.25rem; }
 
             .nav-cta {
                 font-size: 0.72rem;
@@ -646,9 +873,7 @@
                 align-items: center;
             }
 
-            .hero-right {
-                display: none;
-            }
+            .hero-right { display: none; }
 
             h1 {
                 font-size: clamp(2.4rem, 8vw, 3rem);
@@ -662,19 +887,12 @@
                 font-size: 0.95rem;
             }
 
-            .btns {
-                justify-content: center;
-                gap: 0.75rem;
-            }
+            .btns { justify-content: center; gap: 0.75rem; }
 
             .btn {
                 width: 100%;
                 justify-content: center;
                 padding: 0.9rem 1.5rem;
-            }
-
-            .features {
-                padding: 3rem 1.5rem;
             }
 
             .stats-row {
@@ -694,35 +912,47 @@
 
 <body>
 
+    <div class="cursor-glow" id="cursor-glow"></div>
+    <canvas id="particle-canvas"></canvas>
+
     <nav style="background-color: var(--gray);">
         <div class="logo">
             <div class="logo-mark">
-                <img src="./assets/icon.png" alt="SwiftShareX" width="36" height="36" style="border-radius: 8px;" />
+                <img src="./assets/icon.png" alt="SwiftShareX" width="36" height="36" style="margin-right: 10px" />
             </div>
             SwiftShareX
         </div>
-        <div class="nav-right">
-            <a href="https://github.com/mani5h-agarwal/SwiftShareX" class="nav-cta">GitHub →</a>
-        </div>
+        <a href="https://github.com/mani5h-agarwal/SwiftShareX" class="nav-cta">
+            GitHub
+            <img src="./assets/github.svg" class="icon" style="filter: invert(1); opacity: 1;" />
+        </a>
     </nav>
 
-    <section class="hero">
+    <section class="hero" style="position: relative;">
+        <div class="hero-orb hero-orb-1"></div>
+        <div class="hero-orb hero-orb-2"></div>
+
         <div class="hero-left">
-            <div class="eyebrow fade-up">
+            <div class="eyebrow">
                 <div class="eyebrow-dot"></div>
                 No internet required
             </div>
 
-            <h1 class="fade-up">
-                Local transfers,<br>
-                <span class="line2">zero friction.</span>
+            <h1>
+                <span class="word">Local</span>
+                <br />
+                <span class="word">transfers,</span><br>
+                <span class="line2">
+                    <span class="word">zero</span>
+                    <span class="word">friction.</span>
+                </span>
             </h1>
 
-            <p class="hero-desc fade-up">
-                Share files across Windows, macOS &amp; Android over your local network. No cloud. No limits. No
-                waiting.
+            <p class="hero-desc">
+                Share files across Windows, macOS &amp; Android over your local network. No cloud. No limits. No waiting.
             </p>
-            <div class="btns fade-up">
+
+            <div class="btns">
                 <a href="#" id="download-win" class="btn btn-primary loading">
                     <img src="./assets/windows.svg" class="icon" style="filter: invert(1);" />
                     Windows
@@ -731,16 +961,15 @@
                     <img src="./assets/apple.svg" class="icon" />
                     macOS
                 </a>
-                <a href="https://play.google.com/store/apps/details?id=com.swiftshare&hl=en_IN" id="download-android"
-                    class="btn btn-secondary">
+                <a href="https://play.google.com/store/apps/details?id=com.swiftshare&hl=en_IN" id="download-android" class="btn btn-secondary">
                     <img src="./assets/android.svg" class="icon" />
                     Android
                 </a>
             </div>
 
-            <div class="stats-row fade-up">
+            <div class="stats-row">
                 <div class="stat">
-                    <div class="stat-num">~80 MB/s</div>
+                    <div class="stat-num" data-target="80" data-suffix=" MB/s" data-prefix="~">~0 MB/s</div>
                     <div class="stat-label">Transfer speed</div>
                 </div>
                 <div class="stat">
@@ -748,7 +977,7 @@
                     <div class="stat-label">Cloud used</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-num">3</div>
+                    <div class="stat-num" data-target="3" data-suffix="">0</div>
                     <div class="stat-label">Platforms</div>
                 </div>
             </div>
@@ -762,28 +991,29 @@
                     <div class="traffic-light tl-g"></div>
                     <span class="demo-title-text">SwiftShareX</span>
                 </div>
+
                 <div class="demo-body">
-                    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                    <div class="device-cards">
                         <div class="device-card send">
                             <div class="avatar">M</div>
                             <div class="device-info">
                                 <div class="device-name">My MacBook</div>
                                 <div class="device-ip">192.168.1.5 · Sender</div>
                             </div>
-                            <div class="tag">Send</div>
+                            <div class="tag">Sender</div>
                         </div>
 
                         <div class="transfer-section">
                             <div class="transfer-info">
                                 <span class="transfer-filename">project-assets.zip</span>
-                                <span class="transfer-speed">↑ 80 MB/s</span>
+                                <span class="transfer-speed" id="speed-readout">↑ 80 MB/s</span>
                             </div>
                             <div class="track">
                                 <div class="fill"></div>
                             </div>
                             <div class="transfer-meta">
-                                <span>2.4 GB of 3.1 GB</span>
-                                <span>~11s remaining</span>
+                                <span id="bytes-readout">2.4 GB of 3.1 GB</span>
+                                <span id="time-readout">~11s remaining</span>
                             </div>
                         </div>
 
@@ -793,40 +1023,63 @@
                                 <div class="device-name">My Phone</div>
                                 <div class="device-ip">192.168.1.11 · Receiver</div>
                             </div>
-                            <div class="tag">Receive</div>
+                            <div class="tag">Receiver</div>
                         </div>
                     </div>
 
-                    <div class="mac-note fade-up">
+                    <!-- ── PLATFORM NOTE CARD ── -->
+                    <div class="mac-note">
                         <div class="mac-note-header">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2.5">
-                                <circle cx="12" cy="12" r="10" />
-                                <path d="M12 16v-4M12 8h.01" />
-                            </svg>
-                            macOS — First launch setup
+                            <!-- Label -->
+                            <div class="mac-note-header__label">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 16v-4M12 8h.01" />
+                                </svg>
+                                <span id="note-platform-label">First launch setup</span>
+                            </div>
+
+                            <!-- Toggle -->
+                            <div class="platform-toggle" role="group" aria-label="Select platform">
+                                <button
+                                    id="tab-mac"
+                                    class="platform-toggle__btn"
+                                    data-active="true"
+                                    aria-pressed="true"
+                                    onclick="switchPlatform('mac', event)">
+                                    macOS
+                                </button>
+                                <button
+                                    id="tab-win"
+                                    class="platform-toggle__btn"
+                                    data-active="false"
+                                    aria-pressed="false"
+                                    onclick="switchPlatform('win', event)">
+                                    Windows
+                                </button>
+                            </div>
                         </div>
-                        <ul class="mac-steps">
-                            <li>
-                                <div class="step-num">1</div> Open the <strong>.dmg</strong> and drag SwiftShareX to
-                                Applications.
-                            </li>
-                            <li>
-                                <div class="step-num">2</div> Launch it — macOS will block it. Click
-                                <strong>Done</strong>.
-                            </li>
-                            <li>
-                                <div class="step-num">3</div> Go to <strong>System Settings → Privacy &amp;
-                                    Security</strong>.
-                            </li>
-                            <li>
-                                <div class="step-num">4</div> Scroll down and click <strong>Open Anyway</strong> next to
-                                SwiftShareX.
-                            </li>
-                            <li>
-                                <div class="step-num">5</div> Confirm with <strong>Open</strong>. You're all set!
-                            </li>
-                        </ul>
+
+                        <!-- Stacked container to preserve height -->
+                        <div class="mac-steps-stack">
+                            <!-- macOS steps -->
+                            <ul class="mac-steps" id="steps-mac">
+                                <li><div class="step-num">1</div> Open the <strong>.dmg</strong> and drag SwiftShareX to Applications.</li>
+                                <li><div class="step-num">2</div> Launch it — macOS will block it. Click <strong>Done</strong>.</li>
+                                <li><div class="step-num">3</div> Go to <strong>System Settings → Privacy &amp; Security</strong>.</li>
+                                <li><div class="step-num">4</div> Scroll down and click <strong>Open Anyway</strong> next to SwiftShareX.</li>
+                                <li><div class="step-num">5</div> Confirm with <strong>Open</strong>. You're all set!</li>
+                            </ul>
+
+                            <!-- Windows steps -->
+                            <ul class="mac-steps" id="steps-win" style="opacity: 0; visibility: hidden; pointer-events: none;">
+                                <li><div class="step-num">1</div> Run the <strong>.exe</strong> installer you downloaded.</li>
+                                <li><div class="step-num">2</div> Windows SmartScreen may appear — click <strong>More info</strong>.</li>
+                                <li><div class="step-num">3</div> Click <strong>Run anyway</strong> to proceed.</li>
+                                <li><div class="step-num">4</div> Follow the setup wizard and click <strong>Install</strong>.</li>
+                                <li><div class="step-num">5</div> Launch SwiftShareX from the Start menu. Done!</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -835,40 +1088,34 @@
 
     <footer style="background-color: var(--gray);">
         <span>&copy; 2026 SwiftShareX</span>
-        <span style="opacity:0.3;">·</span>
+        <span style="opacity: 0.3;">·</span>
         <a href="https://github.com/mani5h-agarwal/SwiftShareX">Open source on GitHub</a>
-        <span style="opacity:0.3;">·</span>
+        <span style="opacity: 0.3;">·</span>
         <span>Built with speed in mind.</span>
     </footer>
 
     <script>
-        const GITHUB_REPO = 'mani5h-agarwal/SwiftShareX';
-        const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases/latest`;
+        // ═══════════════════════════════════════════════════════
+        //  1. GITHUB RELEASE FETCHING
+        // ═══════════════════════════════════════════════════════
+        const GITHUB_REPO   = 'mani5h-agarwal/SwiftShareX';
+        const RELEASES_URL  = `https://github.com/${GITHUB_REPO}/releases/latest`;
 
         async function fetchLatestRelease() {
             const winBtn = document.getElementById('download-win');
             const macBtn = document.getElementById('download-mac');
-
             try {
                 const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
                 if (!res.ok) throw new Error('GitHub API error');
-
-                const data = await res.json();
+                const data   = await res.json();
                 const assets = data.assets ?? [];
-
                 const winAsset = assets.find(a => a.name.endsWith('.exe'));
                 const macAsset = assets.find(a => a.name.endsWith('.dmg'));
-
-                // Windows
                 winBtn.href = winAsset ? winAsset.browser_download_url : RELEASES_URL;
-                winBtn.classList.remove('loading');
-
-                // macOS
                 macBtn.href = macAsset ? macAsset.browser_download_url : RELEASES_URL;
+                winBtn.classList.remove('loading');
                 macBtn.classList.remove('loading');
-
-            } catch (err) {
-                // On failure, point all buttons to the releases page
+            } catch {
                 [winBtn, macBtn].forEach(btn => {
                     btn.href = RELEASES_URL;
                     btn.classList.remove('loading');
@@ -877,7 +1124,214 @@
         }
 
         fetchLatestRelease();
+
+        // ═══════════════════════════════════════════════════════
+        //  2. CURSOR GLOW
+        // ═══════════════════════════════════════════════════════
+        const glow = document.getElementById('cursor-glow');
+        document.addEventListener('mousemove', e => {
+            glow.style.left = e.clientX + 'px';
+            glow.style.top  = e.clientY + 'px';
+        });
+
+        // ═══════════════════════════════════════════════════════
+        //  3. PARTICLE CANVAS
+        // ═══════════════════════════════════════════════════════
+        (function () {
+            const canvas = document.getElementById('particle-canvas');
+            const ctx    = canvas.getContext('2d');
+            let W, H, particles = [];
+            const COUNT = 55;
+
+            function resize() {
+                W = canvas.width  = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            class Particle {
+                constructor() { this.reset(true); }
+                reset(random) {
+                    this.x     = Math.random() * W;
+                    this.y     = random ? Math.random() * H : H + 10;
+                    this.r     = Math.random() * 1.8 + 0.4;
+                    this.vx    = (Math.random() - 0.5) * 0.4;
+                    this.vy    = -(Math.random() * 0.5 + 0.15);
+                    this.alpha = Math.random() * 0.5 + 0.1;
+                    this.color = Math.random() > 0.5 ? '232,82,42' : '124,77,204';
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    if (this.y < -10) this.reset(false);
+                }
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${this.color},${this.alpha})`;
+                    ctx.fill();
+                }
+            }
+
+            for (let i = 0; i < COUNT; i++) particles.push(new Particle());
+
+            function drawConnections() {
+                for (let i = 0; i < particles.length; i++) {
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const dx   = particles[i].x - particles[j].x;
+                        const dy   = particles[i].y - particles[j].y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 100) {
+                            ctx.beginPath();
+                            ctx.moveTo(particles[i].x, particles[i].y);
+                            ctx.lineTo(particles[j].x, particles[j].y);
+                            ctx.strokeStyle = `rgba(124,77,204,${0.08 * (1 - dist / 100)})`;
+                            ctx.lineWidth   = 0.8;
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            function loop() {
+                ctx.clearRect(0, 0, W, H);
+                drawConnections();
+                particles.forEach(p => { p.update(); p.draw(); });
+                requestAnimationFrame(loop);
+            }
+            loop();
+        })();
+
+        // ═══════════════════════════════════════════════════════
+        //  4. MAGNETIC BUTTONS
+        // ═══════════════════════════════════════════════════════
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('mousemove', e => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width  / 2;
+                const y = e.clientY - rect.top  - rect.height / 2;
+                btn.style.transform = `translateY(-3px) scale(1.03) translate(${x * 0.08}px, ${y * 0.08}px)`;
+            });
+            btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+        });
+
+        // ═══════════════════════════════════════════════════════
+        //  5. SCROLL REVEAL
+        // ═══════════════════════════════════════════════════════
+        const revealObserver = new IntersectionObserver(entries => {
+            entries.forEach((entry, i) => {
+                if (entry.isIntersecting) {
+                    entry.target.style.transitionDelay = `${i * 0.1}s`;
+                    entry.target.classList.add('visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.15 });
+
+        document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+        // ═══════════════════════════════════════════════════════
+        //  6. COUNT-UP STATS
+        // ═══════════════════════════════════════════════════════
+        function countUp(el, target, prefix, suffix, duration) {
+            const start = performance.now();
+            function step(now) {
+                const t    = Math.min((now - start) / duration, 1);
+                const ease = 1 - Math.pow(1 - t, 3);
+                el.textContent = prefix + Math.round(target * ease) + suffix;
+                if (t < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        const statsObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const el     = entry.target;
+                    const target = +el.dataset.target;
+                    countUp(el, target, el.dataset.prefix || '', el.dataset.suffix || '', 1200);
+                    statsObserver.unobserve(el);
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('[data-target]').forEach(el => statsObserver.observe(el));
+
+        // ═══════════════════════════════════════════════════════
+        //  7. LIVE TRANSFER TICKER
+        // ═══════════════════════════════════════════════════════
+        (function () {
+            const speedEl = document.getElementById('speed-readout');
+            const bytesEl = document.getElementById('bytes-readout');
+            const timeEl  = document.getElementById('time-readout');
+            if (!speedEl) return;
+
+            let transferred = 2.4;
+            const total     = 3.1;
+
+            function tick() {
+                const speed = (75 + Math.random() * 10).toFixed(1);
+                transferred = Math.min(transferred + 0.04, total);
+                const remaining = ((total - transferred) / (speed / 1000)).toFixed(0);
+
+                speedEl.textContent = `↑ ${speed} MB/s`;
+                bytesEl.textContent = `${transferred.toFixed(2)} GB of ${total} GB`;
+                timeEl.textContent  = transferred >= total ? '✓ Complete' : `~${remaining}s remaining`;
+
+                if (transferred >= total) {
+                    setTimeout(() => { transferred = 0; tick(); }, 1200);
+                    return;
+                }
+                setTimeout(tick, 150);
+            }
+            setTimeout(tick, 1000);
+        })();
+
+        // ═══════════════════════════════════════════════════════
+        //  8. PLATFORM TOGGLE
+        // ═══════════════════════════════════════════════════════
+        function switchPlatform(platform, e) {
+            e.stopPropagation();
+
+            const macSteps = document.getElementById('steps-mac');
+            const winSteps = document.getElementById('steps-win');
+            const macTab   = document.getElementById('tab-mac');
+            const winTab   = document.getElementById('tab-win');
+
+            const isMac = platform === 'mac';
+            
+            /* Use opacity/visibility instead of display to preserve height in grid stack */
+            macSteps.style.opacity = isMac ? '1' : '0';
+            macSteps.style.visibility = isMac ? 'visible' : 'hidden';
+            macSteps.style.pointerEvents = isMac ? 'auto' : 'none';
+
+            winSteps.style.opacity = isMac ? '0' : '1';
+            winSteps.style.visibility = isMac ? 'hidden' : 'visible';
+            winSteps.style.pointerEvents = isMac ? 'none' : 'auto';
+
+            /* Force animation replay on the newly shown list (parent + each li stagger) */
+            const activeList = isMac ? macSteps : winSteps;
+
+            // 1. Reset the parent stepsReveal animation
+            activeList.style.animation = 'none';
+            activeList.offsetHeight; /* reflow */
+            activeList.style.animation = '';
+
+            // 2. Reset each li so the stagger fadeSlideUp replays
+            activeList.querySelectorAll('li').forEach(li => {
+                li.style.opacity = '0';
+                li.style.animation = 'none';
+                li.offsetHeight; /* reflow */
+                li.style.animation = '';
+            });
+
+            /* update data-active attributes (CSS reads these) */
+            macTab.dataset.active  = isMac ? 'true' : 'false';
+            winTab.dataset.active  = isMac ? 'false' : 'true';
+            macTab.setAttribute('aria-pressed', isMac ? 'true' : 'false');
+            winTab.setAttribute('aria-pressed', isMac ? 'false' : 'true');
+        }
     </script>
 </body>
-
 </html>

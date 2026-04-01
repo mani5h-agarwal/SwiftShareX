@@ -86,7 +86,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 6
-        versionName "2.0.0"
+        versionName "2.1.0"
         // Disable cleartext by default; override via manifest placeholders if needed
         manifestPlaceholders = [usesCleartextTraffic: false]
         externalNativeBuild {
