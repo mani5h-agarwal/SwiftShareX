@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
 import { Alert, NativeModules, Platform } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from 'react-native-safe-area-context';
 import dgram, { RemoteInfo, Socket } from 'react-native-udp';
 import * as DocumentPicker from '@react-native-documents/picker';
 import DeviceInfo from 'react-native-device-info';
@@ -26,11 +29,6 @@ const BYE_PREFIX = 'SWIFTSHAREX_BYE';
 const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
 const TRANSFER_PORT = 5001;
 const SEND_START_TIMEOUT_MS = 8000;
-
-const initialWindowMetrics = {
-  frame: { x: 0, y: 0, width: 0, height: 0 },
-  insets: { top: 0, left: 0, right: 0, bottom: 0 },
-};
 
 type Role = 'send' | 'receive';
 type DiscoveredDevice = {
@@ -613,20 +611,11 @@ function App() {
       setPickerError(null);
       await cleanupLocalCopy();
 
-      const picker = DocumentPicker.pickSingle
-        ? DocumentPicker.pickSingle
-        : async (opts: any) => {
-            const r = await DocumentPicker.pick({
-              ...opts,
-              allowMultiSelection: false,
-            });
-            return Array.isArray(r) ? r[0] : r;
-          };
-
-      const res = await picker({
+      const [res] = await DocumentPicker.pick({
         presentationStyle: 'fullScreen',
         mode: 'import',
-        type: DocumentPicker.types?.allFiles || undefined,
+        type: DocumentPicker.types.allFiles,
+        allowMultiSelection: false,
       });
 
       const copyResults = await DocumentPicker.keepLocalCopy({

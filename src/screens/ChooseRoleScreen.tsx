@@ -7,7 +7,6 @@ import {
   Linking,
   Platform,
   Alert,
-  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RoleButton from '../components/RoleButton';
@@ -96,7 +95,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FAFBFC" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>

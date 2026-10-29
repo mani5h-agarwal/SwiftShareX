@@ -1,11 +1,8 @@
 package com.swiftshare
 
-import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.WindowManager
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -27,16 +24,6 @@ class MainActivity : ReactActivity() {
     // Switch to the main app theme after the splash is displayed.
     setTheme(R.style.AppTheme)
     super.onCreate(null)
-    
-    // Force navigation bar to white with dark icons
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      window.navigationBarColor = Color.WHITE
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-        window.decorView.systemUiVisibility = 
-          window.decorView.systemUiVisibility or 
-          android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-      }
-    }
   }
 
   /**

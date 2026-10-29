@@ -122,7 +122,7 @@ android {
                 throw new GradleException("Missing release keystore. Define MYAPP_UPLOAD_* props in gradle.properties or your environment.")
             }
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
     externalNativeBuild {

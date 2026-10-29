@@ -56,7 +56,7 @@ const DevicePickerScreen: React.FC<Props> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FAFBFC" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>

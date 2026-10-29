@@ -7,7 +7,6 @@ import {
   ScrollView,
   StatusBar,
   Animated,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
@@ -15,6 +14,7 @@ import EmptyState from '../components/EmptyState';
 import SendConfirmationModal from '../modals/SendConfirmationModal';
 import { ActionRow } from '../components/ActionRow';
 import TabBar, { TabItem } from '../components/TabBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Role = 'send' | 'receive';
 
@@ -73,6 +73,7 @@ const SessionScreen: React.FC<Props> = ({
   onCancelTransfer,
   onTerminate,
 }) => {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(_role);
   const [showSendModal, setShowSendModal] = useState(false);
   const [currentTransferId, setCurrentTransferId] = useState<string | null>(
@@ -147,17 +148,9 @@ const SessionScreen: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <StatusBar
-        translucent={Platform.OS === 'android' && Platform.Version >= 35}
-        backgroundColor={
-          Platform.OS === 'android' && Platform.Version >= 35
-            ? 'transparent'
-            : '#804DCC'
-        }
-        barStyle="light-content"
-      />
+      <StatusBar barStyle="light-content" />
       {/* Enhanced Gradient Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             {/* Animated Connection Indicator */}
@@ -220,7 +213,10 @@ const SessionScreen: React.FC<Props> = ({
       {/* Content Area */}
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.contentInner}
+        contentContainerStyle={[
+          styles.contentInner,
+          { paddingBottom: insets.bottom + 18 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {activeTab === 'send' ? (
@@ -372,10 +368,6 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#804DCC',
     paddingHorizontal: 24,
-    paddingTop:
-      Platform.OS === 'android' && Platform.Version >= 35
-        ? (StatusBar.currentHeight ?? 0) + 24
-        : 24,
     paddingBottom: 24,
     position: 'relative',
     overflow: 'hidden',
