@@ -55,6 +55,10 @@ yarn-error.log
 
 # Bundle artifact
 *.jsbundle
+# Output of a manual `react-native bundle` into src/main; Gradle generates these itself
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/res/drawable-*/node_modules_*
+android/app/src/main/res/raw/keep.xml
 
 # Ruby / CocoaPods
 **/Pods/
