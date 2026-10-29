@@ -100,6 +100,9 @@ function App() {
   const currentTransferModeRef = useRef<TransferMode>('idle');
   const progressRef = useRef<number>(0);
   const justCancelledRef = useRef<boolean>(false);
+  // The engine holds 100% for about a second, so several polls see the same
+  // completion; this makes sure it's recorded once
+  const completionHandledRef = useRef<boolean>(false);
   const localCopyPathRef = useRef<string | null>(null);
   // const receivingFileNameRef = useRef<string>('Unknown File');
 
@@ -287,10 +290,25 @@ function App() {
         if (p === 0 && justCancelledRef.current) {
           justCancelledRef.current = false;
         }
+        // Progress returns to 0 between transfers, so the next one gets handled
+        if (p === 0) {
+          completionHandledRef.current = false;
+        }
 
-        // If progress is happening (> 0 but < 1) and we're idle, switch to receiving
+        const isNewCompletion =
+          p >= 1 &&
+          state === TRANSFER_STATE_COMPLETED &&
+          !completionHandledRef.current;
+
+        // If progress is happening and we're idle, switch to receiving.
+        // A small file can finish between polls, so a completion we never saw
+        // in progress also counts as an incoming transfer.
         // But don't create a new transfer if we just cancelled (residual progress)
-        if (p > 0 && p < 1 && !justCancelledRef.current) {
+        if (
+          p > 0 &&
+          (p < 1 || isNewCompletion) &&
+          !justCancelledRef.current
+        ) {
           setTransferMode(prev => {
             if (prev === 'idle') {
               const fileName =
@@ -316,7 +334,8 @@ function App() {
         }
         // When transfer completes. All bytes arriving isn't enough: the engine
         // still has to save the file under its final name.
-        if (p >= 1 && state === TRANSFER_STATE_COMPLETED) {
+        if (isNewCompletion) {
+          completionHandledRef.current = true;
           // Capture current mode before setTimeout
           setTransferMode(currentMode => {
             const wasSending = currentMode === 'sending';
