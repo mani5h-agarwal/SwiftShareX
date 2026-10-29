@@ -35,13 +35,18 @@ object FilePathResolver {
     }
 
     private fun sanitizeName(filename: String): String {
+        // The name comes from the sender; keep only the last path segment so it
+        // can't point outside the SwiftShareX folder
+        var name = filename.substringAfterLast('/').substringAfterLast('\\')
+        name = name.filter { !it.isISOControl() }
+
         val pendingPattern = Regex("^\\.pending-\\d+-")
-        var name = filename.replace(pendingPattern, "")
+        name = name.replace(pendingPattern, "")
         name = name.removePrefix(".pending-")
         if (name.startsWith('.')) {
             name = name.removePrefix(".")
         }
-        if (name.isBlank()) {
+        if (name.isBlank() || name == "." || name == "..") {
             name = "file"
         }
         return name

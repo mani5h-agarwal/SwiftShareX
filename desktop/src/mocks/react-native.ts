@@ -11,9 +11,17 @@ export const TurboModuleRegistry = {
 export const codegenNativeComponent = () => ReactNativeWeb.View;
 export const codegenNativeCommands = () => ({});
 
+// Android-only API; App.tsx only calls it on Android
+export const PermissionsAndroid = {
+    PERMISSIONS: {},
+    RESULTS: { GRANTED: 'granted' },
+    request: async () => 'granted'
+};
+
 export default {
     ...ReactNativeWeb,
     TurboModuleRegistry,
     codegenNativeComponent,
-    codegenNativeCommands
+    codegenNativeCommands,
+    PermissionsAndroid
 };

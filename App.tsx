@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
-import { Alert, NativeModules, Platform } from 'react-native';
+import {
+  Alert,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
 import {
   SafeAreaProvider,
   initialWindowMetrics,
@@ -12,7 +17,8 @@ import RNFS from 'react-native-fs';
 import RootNavigator from './src/navigation/RootNavigator';
 
 declare global {
-  var startReceiver: (port: number) => boolean;
+  // Only accepts connections from peerIp
+  var startReceiver: (port: number, peerIp: string) => boolean;
   var startSender: (path: string, ip: string, port: number) => boolean;
   var getProgress: () => number;
   var cancelTransfer: () => void;
@@ -479,7 +485,10 @@ function App() {
               // Restart the receiver so we can accept new transfers
               setTimeout(() => {
                 try {
-                  const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+                  const ok = globalThis.startReceiver?.(
+                    TRANSFER_PORT,
+                    currentPeer?.address ?? '',
+                  );
                   if (ok) {
                     startProgressPolling();
                   }
@@ -495,7 +504,27 @@ function App() {
       }
     };
 
+  // Android 7-10 can't save received files into Downloads without this.
+  // (Android 10 also relies on requestLegacyExternalStorage in the manifest.)
+  const ensureStoragePermission = async () => {
+    if (Platform.OS !== 'android' || Number(Platform.Version) >= 30) return;
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      );
+      if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert(
+          'Storage access needed',
+          "Without storage access, files sent to this device can't be saved to Downloads.",
+        );
+      }
+    } catch (e) {
+      console.warn('Storage permission request failed:', e);
+    }
+  };
+
   const startDiscovery = (nextRole: Role) => {
+    ensureStoragePermission();
     setRole(nextRole);
     setSessionPeer(null);
     setSessionId(null);
@@ -797,7 +826,10 @@ function App() {
     if (sessionPeer) {
       // Start the receiver but keep in idle mode
       // It will automatically switch to 'receiving' when data arrives
-      const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+      const ok = globalThis.startReceiver?.(
+        TRANSFER_PORT,
+        sessionPeer.address,
+      );
       if (ok) {
         startProgressPolling();
       }
@@ -847,7 +879,10 @@ function App() {
     // Restart the receiver so we can accept new transfers
     setTimeout(() => {
       try {
-        const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+        const ok = globalThis.startReceiver?.(
+          TRANSFER_PORT,
+          sessionPeer?.address ?? '',
+        );
         if (ok) {
           startProgressPolling();
         }

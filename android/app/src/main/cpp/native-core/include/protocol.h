@@ -70,4 +70,8 @@ struct DataChunkHeader {
 
 constexpr uint8_t END_OF_TRANSFER = 0xFF;
 
+// Largest chunk a receiver will accept; it allocates a buffer of the
+// sender's chunkSize, so this stops a bad sender exhausting memory
+constexpr uint32_t MAX_CHUNK_SIZE = 4 * 1024 * 1024;
+
 } // namespace swiftshare

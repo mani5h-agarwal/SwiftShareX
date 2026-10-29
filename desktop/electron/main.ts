@@ -233,6 +233,13 @@ ipcMain.handle('getLocalIP', () => {
 });
 
 // Helper to find a unique filename by appending (1), (2), etc.
+// The name comes from the sender: keep only the last path segment so it can't
+// point outside the SwiftShareX folder, and drop characters Windows can't save
+function sanitizeFileName(name: string): string {
+  const base = (name.split(/[\\/]/).pop() ?? '').replace(/[<>:"|?*\x00-\x1f]/g, '_');
+  return base === '' || base === '.' || base === '..' ? 'file' : base;
+}
+
 function getUniqueFilePath(dir: string, originalName: string): string {
   const filePath = path.join(dir, originalName);
   if (!fs.existsSync(filePath)) return filePath;
@@ -251,7 +258,7 @@ function getUniqueFilePath(dir: string, originalName: string): string {
 
 // Pure Node.js TCP receiver implementing the SWFT protocol.
 // Replaces C++ engine's startReceiver to avoid macOS BSD O_NONBLOCK/recv issues.
-ipcMain.on('engine:startReceiver', (event, port) => {
+ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
   try {
     // Close any existing server
     if (rxServer) {
@@ -265,6 +272,14 @@ ipcMain.on('engine:startReceiver', (event, port) => {
     }
     const server = net.createServer((sock) => {
       console.log(`[NodeRX] Connection from ${sock.remoteAddress}:${sock.remotePort}`);
+
+      // Only the paired device may send; anyone else on the network is refused
+      const remoteIp = (sock.remoteAddress ?? '').replace(/^::ffff:/, '');
+      if (remoteIp !== peerIp) {
+        console.error(`[NodeRX] Rejected connection from ${remoteIp} (paired peer is ${peerIp})`);
+        sock.destroy();
+        return;
+      }
 
       // We accumulate incoming bytes in a buffer and parse the SWFT protocol
       let buf = Buffer.alloc(0);
@@ -318,7 +333,7 @@ ipcMain.on('engine:startReceiver', (event, port) => {
 
           } else if (phase === 'filename') {
             if (buf.length < nameLen) return;
-            filename = buf.slice(0, nameLen).toString('utf8');
+            filename = sanitizeFileName(buf.slice(0, nameLen).toString('utf8'));
             buf = buf.slice(nameLen);
 
             // Determine unique path to avoid overwriting

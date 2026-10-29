@@ -45,8 +45,14 @@ void TransferEngine::cancel()
     cancelled_ = true;
 }
 
-bool TransferEngine::startReceiver(uint16_t port)
+bool TransferEngine::startReceiver(uint16_t port, const std::string &peerIp)
 {
+    // Update even if already running, so a new session's peer takes effect
+    {
+        std::lock_guard<std::mutex> lock(peerMutex_);
+        allowedPeerIp_ = peerIp;
+    }
+
     // Prevent multiple receiver threads
     bool wasRunning = receiving_.exchange(true);
     cancelled_ = false;
@@ -102,7 +108,9 @@ void TransferEngine::receiverThread(uint16_t port)
 
     while (!cancelled_)
     {
-        int client = accept(server, nullptr, nullptr);
+        sockaddr_in clientAddr{};
+        socklen_t clientAddrLen = sizeof(clientAddr);
+        int client = accept(server, (sockaddr *)&clientAddr, &clientAddrLen);
         if (client < 0)
         {
             // EAGAIN/EWOULDBLOCK -> no pending connections
@@ -113,6 +121,19 @@ void TransferEngine::receiverThread(uint16_t port)
             }
             LOGE("accept failed");
             break;
+        }
+
+        // Only the paired device may send; anyone else on the network is refused
+        char clientIp[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, sizeof(clientIp));
+        {
+            std::lock_guard<std::mutex> lock(peerMutex_);
+            if (allowedPeerIp_ != clientIp)
+            {
+                LOGE("Rejected connection from %s (paired peer is %s)", clientIp, allowedPeerIp_.c_str());
+                close(client);
+                continue;
+            }
         }
 
         // Disable Nagle to reduce latency for control + data mixing
@@ -134,10 +155,24 @@ void TransferEngine::receiverThread(uint16_t port)
             continue;
         }
 
+        if (memcmp(hello.magic, MAGIC, sizeof(MAGIC)) != 0)
+        {
+            LOGE("bad magic, not a SwiftShareX sender");
+            close(client);
+            continue;
+        }
+
         FileMeta meta{};
         if (recv(client, &meta, sizeof(meta), MSG_WAITALL) != sizeof(meta))
         {
             LOGE("meta read failed");
+            close(client);
+            continue;
+        }
+
+        if (meta.chunkSize == 0 || meta.chunkSize > MAX_CHUNK_SIZE)
+        {
+            LOGE("rejected chunk size %u", meta.chunkSize);
             close(client);
             continue;
         }
@@ -214,6 +249,7 @@ void TransferEngine::receiverThread(uint16_t port)
         bytesTransferred_ = resumeOffset;
         totalBytes_ = meta.fileSize;
         bool writeFailed = false;
+        std::vector<char> buffer(meta.chunkSize);
 
         while (!cancelled_ && !writeFailed && bytesTransferred_ < totalBytes_)
         {
@@ -228,8 +264,6 @@ void TransferEngine::receiverThread(uint16_t port)
 
             if (hdr.length > meta.chunkSize)
                 break;
-
-            std::vector<char> buffer(hdr.length);
 
             if (recv(client, buffer.data(), hdr.length, MSG_WAITALL) != (ssize_t)hdr.length)
                 break;

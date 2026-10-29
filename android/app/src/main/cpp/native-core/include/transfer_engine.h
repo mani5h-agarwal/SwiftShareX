@@ -25,8 +25,8 @@ namespace swiftshare
         TransferEngine();
         ~TransferEngine();
 
-        // Receiver
-        bool startReceiver(uint16_t port);
+        // Receiver; only accepts connections from peerIp
+        bool startReceiver(uint16_t port, const std::string &peerIp);
         void setPathResolver(PathResolverCallback resolver);
         // Sender (implemented later)
         bool startSender(const std::string &filePath,
@@ -51,6 +51,8 @@ namespace swiftshare
         std::atomic<bool> receiving_;
         std::atomic<TransferState> state_;
         PathResolverCallback pathResolver_;
+        mutable std::mutex peerMutex_;
+        std::string allowedPeerIp_;
         mutable std::mutex fileInfoMutex_;
         std::string currentFileName_;
         uint64_t currentFileSize_;

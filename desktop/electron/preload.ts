@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // ── Engine functions: MUST be synchronous because App.tsx calls them without await ──
 // Use sendSync so the return value is available immediately.
-contextBridge.exposeInMainWorld('startReceiver', (port: number): boolean =>
-  ipcRenderer.sendSync('engine:startReceiver', port)
+contextBridge.exposeInMainWorld('startReceiver', (port: number, peerIp: string): boolean =>
+  ipcRenderer.sendSync('engine:startReceiver', port, peerIp)
 );
 contextBridge.exposeInMainWorld('startSender', (filePath: string, ip: string, port: number): boolean =>
   ipcRenderer.sendSync('engine:startSender', filePath, ip, port)

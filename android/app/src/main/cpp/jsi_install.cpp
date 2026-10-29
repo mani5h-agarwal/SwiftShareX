@@ -150,13 +150,13 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
         jsi::Function::createFromHostFunction(
             runtime,
             jsi::PropNameID::forAscii(runtime, "startReceiver"),
-            1,
+            2,
             [](jsi::Runtime &rt,
                const jsi::Value &,
                const jsi::Value *args,
                size_t count) -> jsi::Value
             {
-                if (count < 1 || !args[0].isNumber())
+                if (count < 2 || !args[0].isNumber() || !args[1].isString())
                 {
                     LOGE("startReceiver: invalid arguments");
                     return jsi::Value(false);
@@ -168,8 +168,9 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
                 }
 
                 uint16_t port = static_cast<uint16_t>(args[0].asNumber());
-                LOGI("Starting receiver on port %d", port);
-                bool ok = engine->startReceiver(port);
+                std::string peerIp = args[1].asString(rt).utf8(rt);
+                LOGI("Starting receiver on port %d for peer %s", port, peerIp.c_str());
+                bool ok = engine->startReceiver(port, peerIp);
 
                 return jsi::Value(ok);
             }));
