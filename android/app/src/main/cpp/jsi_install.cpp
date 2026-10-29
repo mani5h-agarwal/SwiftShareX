@@ -231,6 +231,26 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
 
     runtime.global().setProperty(
         runtime,
+        "getTransferState",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "getTransferState"),
+            0,
+            [](jsi::Runtime &,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (!engine)
+                {
+                    return jsi::Value(static_cast<int>(TransferState::Idle));
+                }
+
+                return jsi::Value(static_cast<int>(engine->getState()));
+            }));
+
+    runtime.global().setProperty(
+        runtime,
         "cancelTransfer",
         jsi::Function::createFromHostFunction(
             runtime,

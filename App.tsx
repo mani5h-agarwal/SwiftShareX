@@ -18,6 +18,7 @@ declare global {
   var cancelTransfer: () => void;
   var getCurrentFileName: () => string;
   var getCurrentFileSize: () => number;
+  var getTransferState: () => number;
 }
 
 const DISCOVERY_PORT = 41234;
@@ -29,6 +30,9 @@ const BYE_PREFIX = 'SWIFTSHAREX_BYE';
 const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
 const TRANSFER_PORT = 5001;
 const SEND_START_TIMEOUT_MS = 8000;
+// Matches TransferState in the native engines
+const TRANSFER_STATE_COMPLETED = 2;
+const TRANSFER_STATE_FAILED = 3;
 
 type Role = 'send' | 'receive';
 type DiscoveredDevice = {
@@ -252,6 +256,17 @@ function App() {
   const startProgressPolling = () => {
     stopProgressPolling();
     progressTimerRef.current = setInterval(() => {
+      // The engine reports a dropped or broken transfer here; progress alone can't show it
+      const mode = currentTransferModeRef.current;
+      const state = globalThis.getTransferState?.();
+      if (
+        state === TRANSFER_STATE_FAILED &&
+        (mode === 'sending' || mode === 'receiving')
+      ) {
+        handleTransferInterrupted(mode);
+        return;
+      }
+
       const p = globalThis.getProgress?.();
       if (typeof p === 'number') {
         setProgress(p);
@@ -293,8 +308,9 @@ function App() {
             return prev;
           });
         }
-        // When transfer completes
-        if (p >= 1) {
+        // When transfer completes. All bytes arriving isn't enough: the engine
+        // still has to save the file under its final name.
+        if (p >= 1 && state === TRANSFER_STATE_COMPLETED) {
           // Capture current mode before setTimeout
           setTransferMode(currentMode => {
             const wasSending = currentMode === 'sending';
@@ -681,6 +697,46 @@ function App() {
     setPickerError(message);
     cleanupLocalCopy();
     Alert.alert('Send failed', message);
+  };
+
+  // The engine thread has already stopped, so unlike handleSendFailure this
+  // leaves the receiver and progress polling running for the next transfer.
+  const handleTransferInterrupted = (mode: 'sending' | 'receiving') => {
+    clearSendStartTimeout();
+    // Update the ref now so the next poll doesn't report the same failure again
+    currentTransferModeRef.current = 'idle';
+
+    const transferId = currentTransferIdRef.current;
+    if (transferId) {
+      const markCancelled = (prevFiles: FileTransferRecord[]) =>
+        prevFiles.map(f =>
+          f.id === transferId ? { ...f, status: 'cancelled' as const } : f,
+        );
+      if (mode === 'sending') {
+        setSentFiles(markCancelled);
+      } else {
+        setReceivedFiles(markCancelled);
+      }
+    }
+
+    currentTransferIdRef.current = null;
+    setTransferMode('idle');
+    setProgress(0);
+    progressRef.current = 0;
+
+    if (mode === 'sending') {
+      setPickedFile(null);
+      cleanupLocalCopy();
+      Alert.alert(
+        'Send failed',
+        'The connection was lost before the file finished sending. Please try again.',
+      );
+    } else {
+      Alert.alert(
+        'Receive failed',
+        'The connection was lost before the file finished downloading.',
+      );
+    }
   };
 
   const sendFile = () => {

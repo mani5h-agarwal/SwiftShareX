@@ -24,6 +24,14 @@ let txTotalBytes = 0;
 let txCurrentFileName = '';
 let txCurrentFileSize = 0;
 
+// Outcome of the most recent transfer, polled by JS alongside progress.
+// Values match TransferState in the Android engine (transfer_engine.h).
+const TransferState = { Idle: 0, Active: 1, Completed: 2, Failed: 3 } as const;
+let transferState: number = TransferState.Idle;
+// Incremented per transfer so events from an old socket can't overwrite a newer transfer's state
+let transferSeq = 0;
+const SOCKET_TIMEOUT_MS = 30000;
+
 // Compute broadcast addresses for all active IPv4 network interfaces.
 // When the Mac is a hotspot, macOS creates a bridge interface (e.g. bridge100)
 // with a real subnet like 192.168.2.0/24. We must send to 192.168.2.255
@@ -266,8 +274,16 @@ ipcMain.on('engine:startReceiver', (event, port) => {
       let chunkSize = 0;
       let filename = '';
       let fd: number = -1;
+      let outPath = '';
+      // Data goes to a .part file that only gets the real name once complete,
+      // so an interrupted transfer never looks like a finished file
+      let partPath = '';
       let written = 0;
       let chunkRemaining = 0;
+      let seq = -1;
+
+      // Without a timeout, a sender that vanishes (e.g. Wi-Fi drop) leaves us waiting forever
+      sock.setTimeout(SOCKET_TIMEOUT_MS, () => sock.destroy(new Error('timeout')));
 
       // Sizes (all little-endian, matching protocol.h)
       const HELLO_SIZE = 8;  // magic(4) + version(1) + mode(1) + reserved(2)
@@ -306,7 +322,8 @@ ipcMain.on('engine:startReceiver', (event, port) => {
             buf = buf.slice(nameLen);
 
             // Determine unique path to avoid overwriting
-            const outPath = getUniqueFilePath(downloadsDir, filename);
+            outPath = getUniqueFilePath(downloadsDir, filename);
+            partPath = `${outPath}.part`;
             const finalFilename = path.basename(outPath);
             
             console.log(`[NodeRX] Receiving: ${filename} (saved as ${finalFilename}) (${fileSize} bytes) → ${outPath}`);
@@ -317,12 +334,15 @@ ipcMain.on('engine:startReceiver', (event, port) => {
             rxTotalBytes = fileSize;
             rxBytesTransferred = 0;
             written = 0;
+            seq = ++transferSeq;
+            transferState = TransferState.Active;
 
             // Open file for writing (create or truncate)
             try {
-              fd = fs.openSync(outPath, 'w');
+              fd = fs.openSync(partPath, 'w');
             } catch (e) {
-              console.error(`[NodeRX] Failed to open file: ${outPath}`, e);
+              console.error(`[NodeRX] Failed to open file: ${partPath}`, e);
+              partPath = '';
               sock.destroy();
               return;
             }
@@ -345,10 +365,26 @@ ipcMain.on('engine:startReceiver', (event, port) => {
 
               if (chunkLen === 0) {
                 // End-of-transfer marker
+                if (written !== fileSize) {
+                  // Sender stopped early (e.g. it cancelled)
+                  console.error(`[NodeRX] Incomplete: ${written} of ${fileSize} bytes`);
+                  sock.destroy();
+                  return;
+                }
+                try {
+                  // closeSync can report a deferred write error, so it counts towards success
+                  fs.closeSync(fd);
+                  fd = -1;
+                  fs.renameSync(partPath, outPath);
+                } catch (e) {
+                  console.error(`[NodeRX] Failed to save ${outPath}:`, e);
+                  sock.destroy();
+                  return;
+                }
                 console.log(`[NodeRX] Transfer complete: ${filename}`);
-                if (fd >= 0) { fs.closeSync(fd); fd = -1; }
                 rxBytesTransferred = rxTotalBytes; // Signal 100%
                 phase = 'done';
+                if (seq === transferSeq) transferState = TransferState.Completed;
                 sock.end();
                 return;
               }
@@ -411,6 +447,19 @@ ipcMain.on('engine:startReceiver', (event, port) => {
         rxCurrentFileName = '';
         rxCurrentFileSize = 0;
       });
+
+      sock.on('close', () => {
+        if (phase !== 'done' && partPath) {
+          if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
+          try { fs.unlinkSync(partPath); } catch {}
+        }
+        // Closed mid-file: progress was reset above, so flag the failure for JS
+        if (phase === 'data' && seq === transferSeq) {
+          rxBytesTransferred = 0;
+          rxTotalBytes = 0;
+          transferState = TransferState.Failed;
+        }
+      });
     });
 
     server.on('error', (err) => console.error('[NodeRX] Server error:', err));
@@ -444,6 +493,9 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     const client = new net.Socket();
     txSocket = client;
+    const seq = ++transferSeq;
+    transferState = TransferState.Active;
+    client.setTimeout(SOCKET_TIMEOUT_MS, () => client.destroy(new Error('timeout')));
 
     client.connect(port, ip, () => {
       console.log(`[NodeTX] Connected to ${ip}:${port}`);
@@ -510,6 +562,7 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
             client.write(endHdr, () => {
               console.log(`[NodeTX] Transfer complete: ${txCurrentFileName}`);
               phase = 'done';
+              if (seq === transferSeq) transferState = TransferState.Completed;
               // Keep socket open for a moment? No, protocol says done.
               setTimeout(() => client.destroy(), 500);
             });
@@ -526,6 +579,12 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
     client.on('close', () => {
       console.log(`[NodeTX] Socket closed.`);
       txSocket = null;
+      if (phase !== 'done' && seq === transferSeq) {
+        // Connect failed or the connection dropped mid-file
+        txBytesTransferred = 0;
+        txTotalBytes = 0;
+        transferState = TransferState.Failed;
+      }
       // Reset state after a brief delay
       setTimeout(() => {
         if (!txSocket) {
@@ -574,6 +633,10 @@ ipcMain.on('engine:getProgress', (event) => {
     event.returnValue = 0;
   }
   catch { event.returnValue = 0; }
+});
+
+ipcMain.on('engine:getTransferState', (event) => {
+  event.returnValue = transferState;
 });
 
 ipcMain.on('engine:cancelTransfer', (event) => {

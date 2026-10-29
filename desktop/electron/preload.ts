@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('startSender', (filePath: string, ip: string, po
 contextBridge.exposeInMainWorld('getProgress', (): number =>
   ipcRenderer.sendSync('engine:getProgress')
 );
+contextBridge.exposeInMainWorld('getTransferState', (): number =>
+  ipcRenderer.sendSync('engine:getTransferState')
+);
 contextBridge.exposeInMainWorld('cancelTransfer', (): void =>
   ipcRenderer.sendSync('engine:cancelTransfer')
 );

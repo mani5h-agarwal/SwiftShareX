@@ -10,6 +10,15 @@ namespace swiftshare
 {
     using PathResolverCallback = std::function<std::string(const std::string &filename)>;
 
+    // Outcome of the most recent transfer, polled by JS alongside progress
+    enum class TransferState : int
+    {
+        Idle = 0,
+        Active = 1,
+        Completed = 2,
+        Failed = 3,
+    };
+
     class TransferEngine
     {
     public:
@@ -25,6 +34,7 @@ namespace swiftshare
                          uint16_t port);
 
         double getProgress() const;
+        TransferState getState() const;
         void cancel();
         std::string getCurrentFileName() const;
         uint64_t getCurrentFileSize() const;
@@ -39,6 +49,7 @@ namespace swiftshare
         std::atomic<uint64_t> totalBytes_;
         std::atomic<bool> cancelled_;
         std::atomic<bool> receiving_;
+        std::atomic<TransferState> state_;
         PathResolverCallback pathResolver_;
         mutable std::mutex fileInfoMutex_;
         std::string currentFileName_;

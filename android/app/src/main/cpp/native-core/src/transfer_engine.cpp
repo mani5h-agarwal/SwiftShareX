@@ -25,6 +25,7 @@ TransferEngine::TransferEngine()
       totalBytes_(0),
       cancelled_(false),
       receiving_(false),
+      state_(TransferState::Idle),
       pathResolver_(nullptr),
       currentFileName_(""),
       currentFileSize_(0) {}
@@ -118,6 +119,12 @@ void TransferEngine::receiverThread(uint16_t port)
         int nodelay = 1;
         setsockopt(client, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
+        // Without a timeout, a sender that vanishes (e.g. Wi-Fi drop) blocks recv forever
+        struct timeval timeout;
+        timeout.tv_sec = 30;
+        timeout.tv_usec = 0;
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
         // Handle a single file transfer per connection
         HelloPacket hello{};
         if (recv(client, &hello, sizeof(hello), MSG_WAITALL) != sizeof(hello))
@@ -175,12 +182,17 @@ void TransferEngine::receiverThread(uint16_t port)
             currentFileName_ = filename;
             currentFileSize_ = meta.fileSize;
         }
+        state_ = TransferState::Active;
 
-        // Use O_TRUNC to avoid leftover bytes if a file with the same name exists
-        int fd = open(outPath.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        // Write to a .part file and only give it the real name once complete,
+        // so an interrupted transfer never looks like a finished file
+        std::string partPath = outPath + ".part";
+
+        // Use O_TRUNC to avoid leftover bytes if a stale .part file exists
+        int fd = open(partPath.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (fd < 0)
         {
-            LOGE("file open failed: %s", outPath.c_str());
+            LOGE("file open failed: %s", partPath.c_str());
             close(client);
             continue;
         }
@@ -192,6 +204,7 @@ void TransferEngine::receiverThread(uint16_t port)
         {
             LOGE("Failed to send resume offset");
             close(fd);
+            unlink(partPath.c_str());
             close(client);
             continue;
         }
@@ -200,8 +213,9 @@ void TransferEngine::receiverThread(uint16_t port)
 
         bytesTransferred_ = resumeOffset;
         totalBytes_ = meta.fileSize;
+        bool writeFailed = false;
 
-        while (!cancelled_ && bytesTransferred_ < totalBytes_)
+        while (!cancelled_ && !writeFailed && bytesTransferred_ < totalBytes_)
         {
             DataChunkHeader hdr{};
 
@@ -225,19 +239,46 @@ void TransferEngine::receiverThread(uint16_t port)
             {
                 ssize_t w = write(fd, buffer.data() + written, hdr.length - written);
                 if (w <= 0)
+                {
+                    // e.g. storage full; don't count bytes that never reached the disk
+                    LOGE("write failed: %s", strerror(errno));
+                    writeFailed = true;
                     break;
+                }
                 written += w;
             }
 
-            bytesTransferred_ += hdr.length;
+            if (!writeFailed)
+                bytesTransferred_ += hdr.length;
         }
 
-        close(fd);
+        // close() can report a deferred write error, so it counts towards success
+        bool closeFailed = close(fd) != 0;
         close(client);
 
-        // Don't reset immediately - let JS detect completion (progress = 1.0)
-        // Wait briefly, then reset for next transfer
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        bool complete = !cancelled_ && !writeFailed && !closeFailed &&
+                        bytesTransferred_ == totalBytes_;
+        if (complete && rename(partPath.c_str(), outPath.c_str()) != 0)
+        {
+            LOGE("rename to %s failed: %s", outPath.c_str(), strerror(errno));
+            complete = false;
+        }
+        if (!complete)
+            unlink(partPath.c_str());
+
+        if (complete)
+        {
+            state_ = TransferState::Completed;
+            // Don't reset immediately - let JS detect completion (progress = 1.0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+        else
+        {
+            LOGE("Receive incomplete: %llu of %llu bytes",
+                 (unsigned long long)bytesTransferred_.load(), (unsigned long long)totalBytes_.load());
+        }
+
+        // Reset for next transfer
         bytesTransferred_ = 0;
         totalBytes_ = 0;
 
@@ -247,6 +288,10 @@ void TransferEngine::receiverThread(uint16_t port)
             currentFileName_.clear();
             currentFileSize_ = 0;
         }
+
+        // Set after the reset so JS never sees a failure with stale progress
+        if (!complete)
+            state_ = TransferState::Failed;
     }
 
     close(server);
@@ -260,6 +305,11 @@ double TransferEngine::getProgress() const
     return (double)bytesTransferred_ / (double)totalBytes_;
 }
 
+TransferState TransferEngine::getState() const
+{
+    return state_;
+}
+
 bool TransferEngine::startSender(const std::string &filePath,
                                  const std::string &ip,
                                  uint16_t port)
@@ -267,6 +317,7 @@ bool TransferEngine::startSender(const std::string &filePath,
     cancelled_ = false;
     bytesTransferred_ = 0;
     totalBytes_ = 0;
+    state_ = TransferState::Active;
 
     std::thread([=]()
                 { this->senderThread(filePath, ip, port); })
@@ -281,11 +332,20 @@ void TransferEngine::senderThread(const std::string &filePath,
 {
     using namespace swiftshare;
 
+    // Reset progress before flagging failure so JS never sees stale progress
+    auto failSend = [this]()
+    {
+        bytesTransferred_ = 0;
+        totalBytes_ = 0;
+        state_ = TransferState::Failed;
+    };
+
     // 1️⃣ Open file
     int fd = open(filePath.c_str(), O_RDONLY);
     if (fd < 0)
     {
         LOGE("Failed to open file: %s", filePath.c_str());
+        failSend();
         return;
     }
 
@@ -304,6 +364,7 @@ void TransferEngine::senderThread(const std::string &filePath,
     {
         LOGE("socket() failed");
         close(fd);
+        failSend();
         return;
     }
 
@@ -332,6 +393,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Invalid IP address");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
     // 3️⃣ Connect
@@ -340,6 +402,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("connect() failed");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
 
@@ -357,6 +420,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Failed to send HELLO packet");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
 
@@ -370,6 +434,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Failed to send FileMeta");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
 
@@ -378,6 +443,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Failed to send filename");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
 
@@ -389,6 +455,7 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Failed to receive resume offset");
         close(sock);
         close(fd);
+        failSend();
         return;
     }
 
@@ -413,6 +480,7 @@ void TransferEngine::senderThread(const std::string &filePath,
             LOGE("Failed to send DataChunkHeader");
             close(sock);
             close(fd);
+            failSend();
             return;
         }
 
@@ -425,6 +493,7 @@ void TransferEngine::senderThread(const std::string &filePath,
                 LOGE("send() failed during data transfer");
                 close(sock);
                 close(fd);
+                failSend();
                 return;
             }
             sent += s;
@@ -435,15 +504,25 @@ void TransferEngine::senderThread(const std::string &filePath,
     // 8️⃣ Signal completion with zero-length header
     DataChunkHeader endHdr{};
     endHdr.length = 0;
-    if (send(sock, &endHdr, sizeof(endHdr), 0) != sizeof(endHdr))
+    bool endSent = send(sock, &endHdr, sizeof(endHdr), 0) == sizeof(endHdr);
+    if (!endSent)
     {
         LOGE("Failed to send END marker");
     }
 
-    LOGI("Sender completed transfer");
-
     close(sock);
     close(fd);
+
+    if (cancelled_ || !endSent || bytesTransferred_ != totalBytes_)
+    {
+        LOGE("Send incomplete: %llu of %llu bytes",
+             (unsigned long long)bytesTransferred_.load(), (unsigned long long)totalBytes_.load());
+        failSend();
+        return;
+    }
+
+    LOGI("Sender completed transfer");
+    state_ = TransferState::Completed;
 
     // Wait briefly to let JS detect completion (progress = 1.0) before resetting
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
