@@ -232,8 +232,9 @@ void TransferEngine::receiverThread(uint16_t port)
             continue;
         }
 
-        off_t existing = lseek(fd, 0, SEEK_END);
-        uint64_t resumeOffset = existing;
+        // Resuming isn't supported, so the file always starts from the beginning.
+        // The offset is still sent because senders expect it in the protocol.
+        uint64_t resumeOffset = 0;
 
         if (send(client, &resumeOffset, sizeof(resumeOffset), 0) != sizeof(resumeOffset))
         {
