@@ -19,6 +19,7 @@ type FileItemProps = {
   file: FileTransferRecord;
   progress: number;
   onCancel?: (id: string) => void;
+  onOpen?: (file: FileTransferRecord) => void;
   index: number;
 };
 
@@ -26,6 +27,7 @@ const FileItemComponent = ({
   file,
   progress,
   onCancel,
+  onOpen,
   index: _index,
 }: FileItemProps) => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -34,6 +36,8 @@ const FileItemComponent = ({
   const isInProgress = file.status === 'in-progress';
   const isCompleted = file.status === 'completed';
   const isQueued = file.status === 'queued';
+
+  const canOpen = isCompleted && !!file.savedPath && !!onOpen;
 
   const accentColor = isInProgress
     ? '#804DCC'
@@ -82,7 +86,8 @@ const FileItemComponent = ({
       style={styles.fileCard}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      disabled={!isInProgress}
+      onPress={canOpen ? () => onOpen(file) : undefined}
+      disabled={!isInProgress && !canOpen}
     >
       {/* Left Vertical Progress Bar */}
       <View style={styles.statusBar}>
@@ -146,6 +151,14 @@ const FileItemComponent = ({
               <Text style={styles.metaDivider}>•</Text>
               <Text style={[styles.progressPercentage, { color: accentColor }]}>
                 Waiting
+              </Text>
+            </>
+          )}
+          {canOpen && (
+            <>
+              <Text style={styles.metaDivider}>•</Text>
+              <Text style={[styles.progressPercentage, { color: accentColor }]}>
+                Open
               </Text>
             </>
           )}

@@ -42,6 +42,7 @@ type Props = {
   onRemovePick: (index: number) => void;
   onCancelTransfer: (id?: string) => void;
   onCancelAllSends: () => void;
+  onOpenFile: (file: FileTransferRecord) => void;
   onTerminate: () => void;
 };
 
@@ -62,6 +63,7 @@ const SessionScreen: React.FC<Props> = ({
   onRemovePick,
   onCancelTransfer,
   onCancelAllSends,
+  onOpenFile,
   onTerminate,
 }) => {
   const insets = useSafeAreaInsets();
@@ -341,6 +343,7 @@ const SessionScreen: React.FC<Props> = ({
                   file={file}
                   progress={file.id === currentReceiveId ? progress : 0}
                   onCancel={onCancelTransfer}
+                  onOpen={onOpenFile}
                   index={idx}
                 />
               ))

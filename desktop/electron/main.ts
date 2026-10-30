@@ -27,7 +27,7 @@ let txCurrentFileSize = 0;
 
 // Finished transfers, collected by JS on its progress poll so a file that
 // finishes between polls is never missed. Matches TransferEvent in transfer_engine.h.
-type TransferEvent = { incoming: boolean; fileName: string; fileSize: number; success: boolean; stoppedBySender?: boolean };
+type TransferEvent = { incoming: boolean; fileName: string; fileSize: number; success: boolean; stoppedBySender?: boolean; savedPath?: string };
 let transferEvents: TransferEvent[] = [];
 // Incremented per transfer so an old socket can't reset a newer transfer's progress
 let rxSeq = 0;
@@ -313,13 +313,14 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
 
       // Tell the sender the file wasn't saved, then let 'close' clean up
       const finishReceive = (success: boolean, stoppedBySender = false) => {
+        const savedPath = success ? outPath : undefined;
         if (seq === rxSeq) {
           rxBytesTransferred = 0;
           rxTotalBytes = 0;
           rxCurrentFileName = '';
           rxCurrentFileSize = 0;
         }
-        transferEvents.push({ incoming: true, fileName: filename, fileSize, success, stoppedBySender });
+        transferEvents.push({ incoming: true, fileName: filename, fileSize, success, stoppedBySender, savedPath });
       };
 
       let stoppedBySender = false;
@@ -631,6 +632,29 @@ ipcMain.handle('openDownloadsFolder', async () => {
     fs.mkdirSync(folderPath, { recursive: true });
   }
   return shell.openPath(folderPath);
+});
+
+// Files come from another device, so anything that would run when opened is
+// only shown in its folder
+const RUNNABLE_FILE = /\.(app|applescript|bat|cmd|com|command|cpl|deb|desktop|dmg|exe|hta|inf|jar|js|jse|lnk|msc|msi|pif|pkg|ps1|py|reg|rpm|scpt|scr|sh|terminal|url|vbe|vbs|webloc|workflow|ws|wsf|wsh|appimage)$/i;
+
+ipcMain.handle('openReceivedFile', async (_, filePath: string) => {
+  const folderPath = path.join(app.getPath('downloads'), 'SwiftShareX');
+  const showProblem = (message: string) => {
+    if (mainWindow) dialog.showMessageBox(mainWindow, { type: 'warning', message });
+  };
+
+  if (path.dirname(filePath) !== folderPath || !fs.existsSync(filePath)) {
+    showProblem('This file is no longer in the SwiftShareX folder.');
+    return;
+  }
+  if (RUNNABLE_FILE.test(filePath)) {
+    shell.showItemInFolder(filePath);
+    return;
+  }
+
+  const error = await shell.openPath(filePath);
+  if (error) showProblem(`Could not open this file: ${error}`);
 });
 
 // Progress: check both C++ sender progress AND Node.js (receiver AND sender) progress

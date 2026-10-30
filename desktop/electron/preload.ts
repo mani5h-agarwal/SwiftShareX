@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('swiftshareIPC', {
   fsUnlink: (path: string) => ipcRenderer.invoke('fs:unlink', path),
   fsCopyToCache: (path: string) => ipcRenderer.invoke('fs:copyToCache', path),
   openDownloadsFolder: () => ipcRenderer.invoke('openDownloadsFolder'),
+  openReceivedFile: (filePath: string) => ipcRenderer.invoke('openReceivedFile', filePath),
   udpCreateSocket: (id: string) => ipcRenderer.invoke('udp:createSocket', id),
   udpBind: (id: string, port: number) => ipcRenderer.invoke('udp:bind', id, port),
   udpSend: (id: string, msg: string, port: number, address: string) =>

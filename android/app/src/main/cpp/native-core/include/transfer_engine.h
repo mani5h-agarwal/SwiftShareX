@@ -21,6 +21,8 @@ namespace swiftshare
         bool success;
         // The sender deliberately stopped this file partway
         bool stoppedBySender = false;
+        // Where a received file was saved; empty if it wasn't
+        std::string savedPath = {};
     };
 
     class TransferEngine

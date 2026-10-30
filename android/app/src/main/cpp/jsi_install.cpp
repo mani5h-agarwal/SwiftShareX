@@ -370,6 +370,7 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
                     event.setProperty(rt, "fileSize", static_cast<double>(events[i].fileSize));
                     event.setProperty(rt, "success", events[i].success);
                     event.setProperty(rt, "stoppedBySender", events[i].stoppedBySender);
+                    event.setProperty(rt, "savedPath", jsi::String::createFromUtf8(rt, events[i].savedPath));
                     result.setValueAtIndex(rt, i, std::move(event));
                 }
                 return result;

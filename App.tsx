@@ -24,6 +24,7 @@ type TransferEvent = {
   fileSize: number;
   success: boolean;
   stoppedBySender?: boolean;
+  savedPath?: string;
 };
 
 type QueuedSend = {
@@ -365,7 +366,17 @@ function App() {
     currentReceiveIdRef.current = null;
 
     if (transferId) {
-      setReceivedStatus(transferId, event.success ? 'completed' : 'cancelled');
+      setReceivedFiles(prevFiles =>
+        prevFiles.map(f =>
+          f.id === transferId
+            ? {
+                ...f,
+                status: event.success ? 'completed' : 'cancelled',
+                savedPath: event.savedPath,
+              }
+            : f,
+        ),
+      );
     } else if (event.success) {
       // A small file can finish between polls without ever showing progress
       setReceivedFiles(prevFiles => [
@@ -373,6 +384,7 @@ function App() {
           id: `recv-${Date.now()}-${prevFiles.length}`,
           fileName: event.fileName,
           fileSize: event.fileSize || undefined,
+          savedPath: event.savedPath,
           timestamp: new Date(),
           status: 'completed',
         },
@@ -930,6 +942,23 @@ function App() {
     stopCurrentSend();
   };
 
+  const openReceivedFile = async ({ savedPath }: FileTransferRecord) => {
+    if (!savedPath) return;
+
+    // Desktop shows its own message if the file can't be opened
+    const ipc = (globalThis as any).swiftshareIPC;
+    if (ipc) {
+      ipc.openReceivedFile(savedPath);
+      return;
+    }
+
+    try {
+      await NativeModules.SwiftShareJSI.openFile(savedPath);
+    } catch (e: any) {
+      Alert.alert('Could not open file', e?.message ?? 'Please try again.');
+    }
+  };
+
   const connectToDevice = (device: DiscoveredDevice) => {
     if (!discoverySocketRef.current || !role) return;
     const sock = discoverySocketRef.current;
@@ -1015,6 +1044,7 @@ function App() {
         }
         onCancelTransfer={cancelOngoingTransfer}
         onCancelAllSends={cancelAllSends}
+        onOpenFile={openReceivedFile}
         onTerminate={terminateSession}
       />
     </SafeAreaProvider>

@@ -53,6 +53,7 @@ type NavigatorProps = {
   onRemovePick: (index: number) => void;
   onCancelTransfer: (id?: string) => void;
   onCancelAllSends: () => void;
+  onOpenFile: (file: FileTransferRecord) => void;
   onTerminate: () => void;
 };
 
@@ -77,6 +78,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
   onRemovePick,
   onCancelTransfer,
   onCancelAllSends,
+  onOpenFile,
   onTerminate,
 }) => {
   return (
@@ -84,7 +86,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-            cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
         }}
       >
         {!role ? (
@@ -122,6 +124,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
                 onRemovePick={onRemovePick}
                 onCancelTransfer={onCancelTransfer}
                 onCancelAllSends={onCancelAllSends}
+                onOpenFile={onOpenFile}
                 onTerminate={onTerminate}
               />
             )}

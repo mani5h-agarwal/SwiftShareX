@@ -355,7 +355,8 @@ void TransferEngine::receiverThread(uint16_t port)
         }
 
         // Pushed after the reset so JS never sees a finished transfer with stale progress
-        pushEvent({true, filename, meta.fileSize, complete, stoppedBySender});
+        pushEvent({true, filename, meta.fileSize, complete, stoppedBySender,
+                   complete ? outPath : std::string()});
     }
 
     close(server);
