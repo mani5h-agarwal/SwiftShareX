@@ -18,11 +18,14 @@ contextBridge.exposeInMainWorld('startSenderDirect', (uri: string, _name: string
 contextBridge.exposeInMainWorld('getProgress', (): number =>
   ipcRenderer.sendSync('engine:getProgress')
 );
-contextBridge.exposeInMainWorld('getTransferState', (): number =>
-  ipcRenderer.sendSync('engine:getTransferState')
+contextBridge.exposeInMainWorld('takeTransferEvents', (): any[] =>
+  ipcRenderer.sendSync('engine:takeTransferEvents')
 );
 contextBridge.exposeInMainWorld('cancelTransfer', (): void =>
   ipcRenderer.sendSync('engine:cancelTransfer')
+);
+contextBridge.exposeInMainWorld('cancelSend', (): void =>
+  ipcRenderer.sendSync('engine:cancelSend')
 );
 contextBridge.exposeInMainWorld('getCurrentFileName', (): string =>
   ipcRenderer.sendSync('engine:getCurrentFileName')

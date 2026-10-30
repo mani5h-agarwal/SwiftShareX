@@ -1,26 +1,85 @@
 import React from 'react';
-import { View, Text, Modal, Pressable, StyleSheet, Image } from 'react-native';
+import {
+  View,
+  Text,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Image,
+} from 'react-native';
 import { formatFileSize, getFileExtension } from '../utils/fileUtils';
+import { PickedFile } from '../types/transfer';
 
-type PickedFile = {
-  name: string;
-  uri: string;
-  size?: number | null;
-  path: string;
-};
+const FilePreviewCard = ({
+  file,
+  onRemove,
+}: {
+  file: PickedFile;
+  onRemove?: () => void;
+}) => (
+  <View style={styles.filePreviewCard}>
+    <View style={styles.fileIconWrapper}>
+      <View style={styles.fileIconBackground}>
+        <Text style={styles.fileIcon}>📄</Text>
+      </View>
+      <View style={styles.extensionBadge}>
+        <Text style={styles.extensionText}>{getFileExtension(file.name)}</Text>
+      </View>
+    </View>
+    <View style={styles.fileDetails}>
+      <Text
+        style={[styles.fileName, onRemove && styles.fileNameBesideRemove]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {file.name}
+      </Text>
+      <View style={styles.fileMetaContainer}>
+        <View style={styles.sizeChip}>
+          <Text style={styles.sizeText}>{formatFileSize(file.size)}</Text>
+        </View>
+        <View style={styles.readyIndicator}>
+          <View style={styles.readyPulse} />
+          <View style={styles.readyDot} />
+          <Text style={styles.readyText}>Ready to send</Text>
+        </View>
+      </View>
+    </View>
+    {onRemove && (
+      <Pressable
+        style={({ pressed }) => [
+          styles.removeButton,
+          pressed && styles.closeButtonPressed,
+        ]}
+        onPress={onRemove}
+        hitSlop={8}
+        accessibilityLabel={`Remove ${file.name}`}
+      >
+        <Text style={styles.removeIcon}>✕</Text>
+      </Pressable>
+    )}
+  </View>
+);
 
 const SendConfirmationModal = ({
   visible,
-  file,
+  files,
   onConfirm,
   onCancel,
+  onRemove,
 }: {
   visible: boolean;
-  file: PickedFile | null;
+  files: PickedFile[];
   onConfirm: () => void;
   onCancel: () => void;
+  onRemove: (index: number) => void;
 }) => {
+  const file = files[0];
   if (!file) return null;
+
+  const isBatch = files.length > 1;
+  const totalSize = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
 
   return (
     <Modal
@@ -45,8 +104,14 @@ const SendConfirmationModal = ({
             />
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.modalTitle}>Send File?</Text>
-            <Text style={styles.modalSubtitle}>Confirm your transfer</Text>
+            <Text style={styles.modalTitle}>
+              {isBatch ? `Send ${files.length} Files?` : 'Send File?'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              {isBatch
+                ? `${formatFileSize(totalSize)} in total`
+                : 'Confirm your transfer'}
+            </Text>
           </View>
 
           <Pressable
@@ -60,38 +125,25 @@ const SendConfirmationModal = ({
           </Pressable>
         </View>
 
-        <View style={styles.filePreviewCard}>
-          <View style={styles.fileIconWrapper}>
-            <View style={styles.fileIconBackground}>
-              <Text style={styles.fileIcon}>📄</Text>
-            </View>
-            <View style={styles.extensionBadge}>
-              <Text style={styles.extensionText}>
-                {getFileExtension(file.name)}
-              </Text>
-            </View>
+        {isBatch ? (
+          <ScrollView
+            style={styles.fileList}
+            contentContainerStyle={styles.fileCards}
+            showsVerticalScrollIndicator={false}
+          >
+            {files.map((item, index) => (
+              <FilePreviewCard
+                key={index}
+                file={item}
+                onRemove={() => onRemove(index)}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.fileCards}>
+            <FilePreviewCard file={file} />
           </View>
-
-          <View style={styles.fileDetails}>
-            <Text
-              style={styles.fileName}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {file.name}
-            </Text>
-            <View style={styles.fileMetaContainer}>
-              <View style={styles.sizeChip}>
-                <Text style={styles.sizeText}>{formatFileSize(file.size)}</Text>
-              </View>
-              <View style={styles.readyIndicator}>
-                <View style={styles.readyPulse} />
-                <View style={styles.readyDot} />
-                <Text style={styles.readyText}>Ready to send</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        )}
 
         <View style={styles.actions}>
           <Pressable
@@ -114,7 +166,9 @@ const SendConfirmationModal = ({
             onPress={onConfirm}
           >
             <View style={styles.confirmButtonGradient}>
-              <Text style={styles.confirmButtonText}>Send File</Text>
+              <Text style={styles.confirmButtonText}>
+                {isBatch ? 'Send Files' : 'Send File'}
+              </Text>
               <Text style={styles.confirmButtonIcon}>→</Text>
             </View>
           </Pressable>
@@ -183,16 +237,39 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '700',
   },
+  fileList: {
+    maxHeight: 320,
+  },
+  fileCards: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
   filePreviewCard: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 24,
     padding: 20,
     backgroundColor: '#FAFBFC',
     borderRadius: 20,
     borderWidth: 2,
     borderColor: '#E5E7EB',
     gap: 16,
+  },
+  removeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Out of the row, so the size and status chips keep their full width
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  removeIcon: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '700',
   },
   fileIconWrapper: {
     position: 'relative',
@@ -243,6 +320,9 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     letterSpacing: -0.2,
     lineHeight: 22,
+  },
+  fileNameBesideRemove: {
+    paddingRight: 24,
   },
   fileMetaContainer: {
     flexDirection: 'row',

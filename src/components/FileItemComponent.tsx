@@ -12,15 +12,7 @@ import {
   getFileExtension,
   formatRelativeTime,
 } from '../utils/fileUtils';
-
-// Types
-type FileTransferRecord = {
-  id: string;
-  fileName: string;
-  fileSize?: number;
-  timestamp: Date;
-  status: 'completed' | 'cancelled' | 'in-progress';
-};
+import { FileTransferRecord } from '../types/transfer';
 
 // Main File Item Component
 type FileItemProps = {
@@ -41,24 +33,28 @@ const FileItemComponent = ({
 
   const isInProgress = file.status === 'in-progress';
   const isCompleted = file.status === 'completed';
+  const isQueued = file.status === 'queued';
 
   const accentColor = isInProgress
     ? '#804DCC'
+    : isQueued
+    ? '#9CA3AF'
     : isCompleted
     ? '#10B981'
     : '#FF6B6B';
 
-  const statusIcon = isCompleted ? '✓' : '×';
+  const statusIcon = isCompleted ? '✓' : isQueued ? '…' : '×';
 
   // Animate the left vertical status bar to reflect progress
   useEffect(() => {
-    const target = isInProgress ? progress : 1; // full when completed/cancelled
+    // Full when completed/cancelled
+    const target = isInProgress ? progress : isQueued ? 0 : 1;
     Animated.timing(verticalProgress, {
       toValue: target,
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [isInProgress, progress, verticalProgress]);
+  }, [isInProgress, isQueued, progress, verticalProgress]);
 
   const verticalHeight = verticalProgress.interpolate({
     inputRange: [0, 1],
@@ -124,7 +120,7 @@ const FileItemComponent = ({
           <Text style={styles.fileName} numberOfLines={1}>
             {file.fileName}
           </Text>
-          {isInProgress && onCancel && (
+          {(isInProgress || isQueued) && onCancel && (
             <Pressable
               style={({ pressed }) => [
                 styles.cancelButton,
@@ -145,6 +141,14 @@ const FileItemComponent = ({
           <Text style={styles.timeText}>
             {formatRelativeTime(file.timestamp)}
           </Text>
+          {isQueued && (
+            <>
+              <Text style={styles.metaDivider}>•</Text>
+              <Text style={[styles.progressPercentage, { color: accentColor }]}>
+                Waiting
+              </Text>
+            </>
+          )}
           {isInProgress && (
             <>
               <Text style={styles.metaDivider}>•</Text>

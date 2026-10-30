@@ -7,7 +7,6 @@ import {
   ScrollView,
   StatusBar,
   Animated,
-  ActivityIndicator,
 } from 'react-native';
 import FileItemComponent from '../components/FileItemComponent';
 import EmptyState from '../components/EmptyState';
@@ -15,6 +14,7 @@ import SendConfirmationModal from '../modals/SendConfirmationModal';
 import { ActionRow } from '../components/ActionRow';
 import TabBar, { TabItem } from '../components/TabBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FileTransferRecord, PickedFile } from '../types/transfer';
 
 type Role = 'send' | 'receive';
 
@@ -25,26 +25,11 @@ type DiscoveredDevice = {
   role: Role;
 };
 
-type PickedFile = {
-  name: string;
-  uri: string;
-  size?: number | null;
-  path: string;
-};
-
-type FileTransferRecord = {
-  id: string;
-  fileName: string;
-  fileSize?: number;
-  timestamp: Date;
-  status: 'completed' | 'cancelled' | 'in-progress';
-};
-
 type Props = {
   sessionPeer: DiscoveredDevice;
   role: Role;
   transferPort: number;
-  pickedFile: PickedFile | null;
+  pickedFiles: PickedFile[];
   isPickingFile: boolean;
   pickerError: string | null;
   transferMode: 'idle' | 'sending' | 'receiving';
@@ -52,8 +37,11 @@ type Props = {
   sentFiles: FileTransferRecord[];
   receivedFiles: FileTransferRecord[];
   onPickFile: () => void;
-  onSendFile: () => void;
-  onCancelTransfer: () => void;
+  onSendFiles: () => void;
+  onCancelPick: () => void;
+  onRemovePick: (index: number) => void;
+  onCancelTransfer: (id?: string) => void;
+  onCancelAllSends: () => void;
   onTerminate: () => void;
 };
 
@@ -61,7 +49,7 @@ const SessionScreen: React.FC<Props> = ({
   sessionPeer,
   role: _role,
   transferPort: _transferPort,
-  pickedFile,
+  pickedFiles,
   isPickingFile,
   pickerError: _pickerError,
   transferMode,
@@ -69,8 +57,11 @@ const SessionScreen: React.FC<Props> = ({
   sentFiles,
   receivedFiles,
   onPickFile,
-  onSendFile,
+  onSendFiles,
+  onCancelPick,
+  onRemovePick,
   onCancelTransfer,
+  onCancelAllSends,
   onTerminate,
 }) => {
   const insets = useSafeAreaInsets();
@@ -132,19 +123,22 @@ const SessionScreen: React.FC<Props> = ({
   }, [transferMode, receivedFiles]);
 
   useEffect(() => {
-    if (pickedFile && transferMode === 'idle') {
+    if (pickedFiles.length > 0 && transferMode === 'idle') {
       setShowSendModal(true);
     }
-  }, [pickedFile, transferMode]);
+  }, [pickedFiles, transferMode]);
 
   const handleConfirmSend = () => {
     setShowSendModal(false);
-    onSendFile();
+    onSendFiles();
   };
 
   const handleCancelModal = () => {
     setShowSendModal(false);
+    onCancelPick();
   };
+
+  const queuedCount = sentFiles.filter(f => f.status === 'queued').length;
 
   return (
     <View style={styles.container}>
@@ -258,12 +252,14 @@ const SessionScreen: React.FC<Props> = ({
                     ? 'Sending...'
                     : transferMode === 'receiving'
                     ? 'Receiving...'
-                    : 'Select Document'
+                    : 'Select Files'
                 }
                 subtitle={
-                  transferMode === 'sending' || transferMode === 'receiving'
+                  queuedCount > 0
+                    ? `${queuedCount} more waiting`
+                    : transferMode === 'sending' || transferMode === 'receiving'
                     ? 'Transfer in progress'
-                    : 'Choose a file to share'
+                    : 'Choose files to share'
                 }
                 disabled={
                   transferMode === 'receiving' ||
@@ -272,6 +268,17 @@ const SessionScreen: React.FC<Props> = ({
                 }
                 onPress={onPickFile}
               />
+              {queuedCount > 0 && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.cancelAllButton,
+                    pressed && styles.cancelAllButtonPressed,
+                  ]}
+                  onPress={onCancelAllSends}
+                >
+                  <Text style={styles.cancelAllText}>Cancel All</Text>
+                </Pressable>
+              )}
             </View>
 
             {/* Transfer History */}
@@ -344,18 +351,11 @@ const SessionScreen: React.FC<Props> = ({
 
       <SendConfirmationModal
         visible={showSendModal}
-        file={pickedFile}
+        files={pickedFiles}
         onConfirm={handleConfirmSend}
         onCancel={handleCancelModal}
+        onRemove={onRemovePick}
       />
-      {isPickingFile && (
-        <View style={styles.overlay} pointerEvents="auto">
-          <View style={styles.overlayCard}>
-            <ActivityIndicator color="#804DCC" size="large" />
-            <Text style={styles.overlayText}>Preparing…</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 };
@@ -510,6 +510,21 @@ const styles = StyleSheet.create({
   inProgressText: {
     color: '#804DCC',
   },
+  cancelAllButton: {
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#FF6B6B',
+    alignItems: 'center',
+  },
+  cancelAllButtonPressed: {
+    backgroundColor: '#FF6B6B15',
+  },
+  cancelAllText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FF6B6B',
+  },
   historyCount: {
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 12,
@@ -520,38 +535,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 999,
-  },
-  overlayCard: {
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    gap: 10,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-  },
-  overlayText: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1a1a1a',
   },
 });
 

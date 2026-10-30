@@ -345,22 +345,34 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
 
     runtime.global().setProperty(
         runtime,
-        "getTransferState",
+        "takeTransferEvents",
         jsi::Function::createFromHostFunction(
             runtime,
-            jsi::PropNameID::forAscii(runtime, "getTransferState"),
+            jsi::PropNameID::forAscii(runtime, "takeTransferEvents"),
             0,
-            [](jsi::Runtime &,
+            [](jsi::Runtime &rt,
                const jsi::Value &,
                const jsi::Value *,
                size_t) -> jsi::Value
             {
-                if (!engine)
+                std::vector<TransferEvent> events;
+                if (engine)
                 {
-                    return jsi::Value(static_cast<int>(TransferState::Idle));
+                    events = engine->takeEvents();
                 }
 
-                return jsi::Value(static_cast<int>(engine->getState()));
+                jsi::Array result(rt, events.size());
+                for (size_t i = 0; i < events.size(); i++)
+                {
+                    jsi::Object event(rt);
+                    event.setProperty(rt, "incoming", events[i].incoming);
+                    event.setProperty(rt, "fileName", jsi::String::createFromUtf8(rt, events[i].fileName));
+                    event.setProperty(rt, "fileSize", static_cast<double>(events[i].fileSize));
+                    event.setProperty(rt, "success", events[i].success);
+                    event.setProperty(rt, "stoppedBySender", events[i].stoppedBySender);
+                    result.setValueAtIndex(rt, i, std::move(event));
+                }
+                return result;
             }));
 
     runtime.global().setProperty(
@@ -379,6 +391,27 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
                 {
                     LOGI("Cancelling transfer");
                     engine->cancel();
+                }
+
+                return jsi::Value::undefined();
+            }));
+
+    runtime.global().setProperty(
+        runtime,
+        "cancelSend",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "cancelSend"),
+            0,
+            [](jsi::Runtime &,
+               const jsi::Value &,
+               const jsi::Value *,
+               size_t) -> jsi::Value
+            {
+                if (engine)
+                {
+                    LOGI("Cancelling outgoing file");
+                    engine->cancelSend();
                 }
 
                 return jsi::Value::undefined();

@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <algorithm>
 #include <cstring>
+#include <utility>
 #include <vector>
 #include <thread>
 #include <chrono>
@@ -40,8 +41,8 @@ TransferEngine::TransferEngine()
     : bytesTransferred_(0),
       totalBytes_(0),
       cancelled_(false),
+      sendCancelled_(false),
       receiving_(false),
-      state_(TransferState::Idle),
       pathResolver_(nullptr),
       currentFileName_(""),
       currentFileSize_(0) {}
@@ -59,6 +60,11 @@ void TransferEngine::setPathResolver(PathResolverCallback resolver)
 void TransferEngine::cancel()
 {
     cancelled_ = true;
+}
+
+void TransferEngine::cancelSend()
+{
+    sendCancelled_ = true;
 }
 
 bool TransferEngine::startReceiver(uint16_t port, const std::string &peerIp)
@@ -233,7 +239,6 @@ void TransferEngine::receiverThread(uint16_t port)
             currentFileName_ = filename;
             currentFileSize_ = meta.fileSize;
         }
-        state_ = TransferState::Active;
 
         // Write to a .part file and only give it the real name once complete,
         // so an interrupted transfer never looks like a finished file
@@ -266,6 +271,7 @@ void TransferEngine::receiverThread(uint16_t port)
         bytesTransferred_ = resumeOffset;
         totalBytes_ = meta.fileSize;
         bool writeFailed = false;
+        bool stoppedBySender = false;
         std::vector<char> buffer(meta.chunkSize);
 
         while (!cancelled_ && !writeFailed && bytesTransferred_ < totalBytes_)
@@ -277,7 +283,10 @@ void TransferEngine::receiverThread(uint16_t port)
                 break;
 
             if (hdr.length == 0)
+            {
+                stoppedBySender = true;
                 break;
+            }
 
             if (hdr.length > meta.chunkSize)
                 break;
@@ -328,13 +337,7 @@ void TransferEngine::receiverThread(uint16_t port)
         send(client, &status, sizeof(status), MSG_NOSIGNAL);
         close(client);
 
-        if (complete)
-        {
-            state_ = TransferState::Completed;
-            // Don't reset immediately - let JS detect completion (progress = 1.0)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-        else
+        if (!complete)
         {
             LOGE("Receive incomplete: %llu of %llu bytes",
                  (unsigned long long)bytesTransferred_.load(), (unsigned long long)totalBytes_.load());
@@ -351,9 +354,8 @@ void TransferEngine::receiverThread(uint16_t port)
             currentFileSize_ = 0;
         }
 
-        // Set after the reset so JS never sees a failure with stale progress
-        if (!complete)
-            state_ = TransferState::Failed;
+        // Pushed after the reset so JS never sees a finished transfer with stale progress
+        pushEvent({true, filename, meta.fileSize, complete, stoppedBySender});
     }
 
     close(server);
@@ -367,9 +369,16 @@ double TransferEngine::getProgress() const
     return (double)bytesTransferred_ / (double)totalBytes_;
 }
 
-TransferState TransferEngine::getState() const
+void TransferEngine::pushEvent(TransferEvent event)
 {
-    return state_;
+    std::lock_guard<std::mutex> lock(eventsMutex_);
+    events_.push_back(std::move(event));
+}
+
+std::vector<TransferEvent> TransferEngine::takeEvents()
+{
+    std::lock_guard<std::mutex> lock(eventsMutex_);
+    return std::exchange(events_, {});
 }
 
 bool TransferEngine::startSender(const std::string &filePath,
@@ -391,9 +400,9 @@ bool TransferEngine::startSender(int fd,
                                  uint16_t port)
 {
     cancelled_ = false;
+    sendCancelled_ = false;
     bytesTransferred_ = 0;
     totalBytes_ = 0;
-    state_ = TransferState::Active;
 
     std::thread([=]()
                 { this->senderThread(fd, filename, ip, port); })
@@ -409,12 +418,18 @@ void TransferEngine::senderThread(int fd,
 {
     using namespace swiftshare;
 
-    // Reset progress before flagging failure so JS never sees stale progress
-    auto failSend = [this]()
+    uint64_t fileSize = 0;
+
+    // Reset progress before reporting so JS never sees a finished transfer with stale progress
+    auto finishSend = [&](bool success)
     {
         bytesTransferred_ = 0;
         totalBytes_ = 0;
-        state_ = TransferState::Failed;
+        pushEvent({false, filename, fileSize, success});
+    };
+    auto failSend = [&]()
+    {
+        finishSend(false);
     };
 
     // 1️⃣ Check file
@@ -426,7 +441,7 @@ void TransferEngine::senderThread(int fd,
 
     struct stat st{};
     fstat(fd, &st);
-    uint64_t fileSize = st.st_size;
+    fileSize = st.st_size;
     totalBytes_ = fileSize;
 
     // 2️⃣ Create socket
@@ -538,7 +553,7 @@ void TransferEngine::senderThread(int fd,
 
     std::vector<char> buffer(meta.chunkSize);
 
-    while (!cancelled_)
+    while (!cancelled_ && !sendCancelled_)
     {
         ssize_t n = read(fd, buffer.data(), buffer.size());
         if (n <= 0)
@@ -584,7 +599,9 @@ void TransferEngine::senderThread(int fd,
         LOGE("Failed to send END marker");
     }
 
-    bool delivered = endSent && sentBytes == fileSize && waitForReceiver(sock, fileSize);
+    // Wait even after stopping early, so the next file finds the receiver free
+    bool receiverDone = endSent && waitForReceiver(sock, fileSize);
+    bool delivered = receiverDone && sentBytes == fileSize;
 
     close(sock);
     close(fd);
@@ -598,12 +615,7 @@ void TransferEngine::senderThread(int fd,
     }
 
     LOGI("Sender completed transfer");
-    state_ = TransferState::Completed;
-
-    // Wait briefly to let JS detect completion (progress = 1.0) before resetting
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    bytesTransferred_ = 0;
-    totalBytes_ = 0;
+    finishSend(true);
 }
 
 // Waits for the receiver to confirm the file, keeping progress honest meanwhile
@@ -627,11 +639,23 @@ bool TransferEngine::waitForReceiver(int sock, uint64_t fileSize)
             bytesTransferred_ = fileSize;
             return status == STATUS_OK;
         }
-        if (r == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        if (r == 0)
         {
-            // A receiver without status support closes when it has the whole file
+            // A receiver without status support closes once it has the whole file,
+            // but one that gave up closes with data still unacknowledged
+            if (unacknowledgedBytes(sock) > 0)
+            {
+                LOGE("Receiver closed before taking the whole file");
+                return false;
+            }
             bytesTransferred_ = fileSize;
             return true;
+        }
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            // A reset can mean the receiver died mid-file, so it never counts as delivered
+            LOGE("Connection lost waiting for receiver: %s", strerror(errno));
+            return false;
         }
 
         uint64_t queued = unacknowledgedBytes(sock);

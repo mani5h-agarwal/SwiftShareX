@@ -5,18 +5,22 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <vector>
 
 namespace swiftshare
 {
     using PathResolverCallback = std::function<std::string(const std::string &filename)>;
 
-    // Outcome of the most recent transfer, polled by JS alongside progress
-    enum class TransferState : int
+    // A finished transfer. JS collects these on its progress poll, so a file
+    // that finishes between polls is never missed.
+    struct TransferEvent
     {
-        Idle = 0,
-        Active = 1,
-        Completed = 2,
-        Failed = 3,
+        bool incoming;
+        std::string fileName;
+        uint64_t fileSize;
+        bool success;
+        // The sender deliberately stopped this file partway
+        bool stoppedBySender = false;
     };
 
     class TransferEngine
@@ -40,8 +44,10 @@ namespace swiftshare
                          uint16_t port);
 
         double getProgress() const;
-        TransferState getState() const;
+        std::vector<TransferEvent> takeEvents();
         void cancel();
+        // Stops only the outgoing file; the receiver keeps running
+        void cancelSend();
         std::string getCurrentFileName() const;
         uint64_t getCurrentFileSize() const;
 
@@ -53,15 +59,18 @@ namespace swiftshare
                           uint16_t port);
 
         bool waitForReceiver(int sock, uint64_t fileSize);
+        void pushEvent(TransferEvent event);
 
         std::atomic<uint64_t> bytesTransferred_;
         std::atomic<uint64_t> totalBytes_;
         std::atomic<bool> cancelled_;
+        std::atomic<bool> sendCancelled_;
         std::atomic<bool> receiving_;
-        std::atomic<TransferState> state_;
         PathResolverCallback pathResolver_;
         mutable std::mutex peerMutex_;
         std::string allowedPeerIp_;
+        std::mutex eventsMutex_;
+        std::vector<TransferEvent> events_;
         mutable std::mutex fileInfoMutex_;
         std::string currentFileName_;
         uint64_t currentFileSize_;

@@ -19,20 +19,22 @@ let rxCurrentFileName = '';
 
 // Node.js TCP sender state
 let txSocket: net.Socket | null = null;
+let txStream: fs.ReadStream | null = null;
 let txBytesTransferred = 0;
 let txTotalBytes = 0;
 let txCurrentFileName = '';
 let txCurrentFileSize = 0;
 
-// Outcome of the most recent transfer, polled by JS alongside progress.
-// Values match TransferState in the Android engine (transfer_engine.h).
-const TransferState = { Idle: 0, Active: 1, Completed: 2, Failed: 3 } as const;
-let transferState: number = TransferState.Idle;
-// Incremented per transfer so events from an old socket can't overwrite a newer transfer's state
-let transferSeq = 0;
+// Finished transfers, collected by JS on its progress poll so a file that
+// finishes between polls is never missed. Matches TransferEvent in transfer_engine.h.
+type TransferEvent = { incoming: boolean; fileName: string; fileSize: number; success: boolean; stoppedBySender?: boolean };
+let transferEvents: TransferEvent[] = [];
+// Incremented per transfer so an old socket can't reset a newer transfer's progress
+let rxSeq = 0;
+let txSeq = 0;
 const SOCKET_TIMEOUT_MS = 30000;
-// Sent by the receiver once the file is saved; see protocol.h. Receivers from
-// before this existed just close the connection.
+// Sent by the receiver once the file is saved; see protocol.h. Node can't see
+// whether queued data was delivered, so without this byte a send counts as failed.
 const STATUS_OK = 0;
 const STATUS_ERROR = 1;
 // Queued data can take a while to drain over a slow link once sending finishes
@@ -105,19 +107,16 @@ ipcMain.handle('getDeviceName', () => os.hostname().replace(/\.local$/i, ''));
 ipcMain.handle('pickDocument', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile']
+    properties: ['openFile', 'multiSelections']
   });
   if (result.canceled || result.filePaths.length === 0) return null;
-  
-  const fp = result.filePaths[0];
-  const stats = fs.statSync(fp);
-  
-  return {
+
+  return result.filePaths.map(fp => ({
     uri: 'file://' + fp,
     name: path.basename(fp),
-    size: stats.size,
+    size: fs.statSync(fp).size,
     path: fp
-  };
+  }));
 });
 
 // react-native-fs mock
@@ -313,6 +312,17 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
       const CHUNK_HDR_SIZE = 4; // uint32 length
 
       // Tell the sender the file wasn't saved, then let 'close' clean up
+      const finishReceive = (success: boolean, stoppedBySender = false) => {
+        if (seq === rxSeq) {
+          rxBytesTransferred = 0;
+          rxTotalBytes = 0;
+          rxCurrentFileName = '';
+          rxCurrentFileSize = 0;
+        }
+        transferEvents.push({ incoming: true, fileName: filename, fileSize, success, stoppedBySender });
+      };
+
+      let stoppedBySender = false;
       const failReceive = () => {
         phase = 'failed';
         sock.end(Buffer.from([STATUS_ERROR]));
@@ -361,8 +371,7 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
             rxTotalBytes = fileSize;
             rxBytesTransferred = 0;
             written = 0;
-            seq = ++transferSeq;
-            transferState = TransferState.Active;
+            seq = ++rxSeq;
 
             // Open file for writing (create or truncate)
             try {
@@ -395,6 +404,7 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
                 if (written !== fileSize) {
                   // Sender stopped early (e.g. it cancelled)
                   console.error(`[NodeRX] Incomplete: ${written} of ${fileSize} bytes`);
+                  stoppedBySender = true;
                   failReceive();
                   return;
                 }
@@ -409,9 +419,8 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
                   return;
                 }
                 console.log(`[NodeRX] Transfer complete: ${filename}`);
-                rxBytesTransferred = rxTotalBytes; // Signal 100%
                 phase = 'done';
-                if (seq === transferSeq) transferState = TransferState.Completed;
+                finishReceive(true);
                 sock.end(Buffer.from([STATUS_OK]));
                 return;
               }
@@ -452,27 +461,11 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
       sock.on('end', () => {
         console.log(`[NodeRX] Connection closed (phase=${phase}, written=${written})`);
         if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
-        if (phase !== 'done') {
-          // Premature close
-          rxBytesTransferred = 0;
-          rxTotalBytes = 0;
-        }
-        // Reset state after a brief delay so JS can see completion
-        setTimeout(() => {
-          rxBytesTransferred = 0;
-          rxTotalBytes = 0;
-          rxCurrentFileName = '';
-          rxCurrentFileSize = 0;
-        }, 1500);
       });
 
       sock.on('error', (err) => {
         console.error(`[NodeRX] Socket error:`, err.message);
         if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
-        rxBytesTransferred = 0;
-        rxTotalBytes = 0;
-        rxCurrentFileName = '';
-        rxCurrentFileSize = 0;
       });
 
       sock.on('close', () => {
@@ -480,11 +473,8 @@ ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
           if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
           try { fs.unlinkSync(partPath); } catch {}
         }
-        // Closed mid-file: progress was reset above, so flag the failure for JS
-        if ((phase === 'data' || phase === 'failed') && seq === transferSeq) {
-          rxBytesTransferred = 0;
-          rxTotalBytes = 0;
-          transferState = TransferState.Failed;
+        if (phase === 'data' || phase === 'failed') {
+          finishReceive(false, stoppedBySender);
         }
       });
     });
@@ -520,8 +510,9 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     const client = new net.Socket();
     txSocket = client;
-    const seq = ++transferSeq;
-    transferState = TransferState.Active;
+    const seq = ++txSeq;
+    const sentName = txCurrentFileName;
+    const sentSize = stats.size;
     client.setTimeout(SOCKET_TIMEOUT_MS, () => client.destroy(new Error('timeout')));
 
     client.connect(port, ip, () => {
@@ -551,9 +542,6 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     let phase: 'resume' | 'data' | 'awaitingAck' | 'done' = 'resume';
     let receiverStatus: number | null = null;
-    let receiverClosed = false;
-
-    client.on('end', () => { receiverClosed = true; });
 
     client.on('data', (data: Buffer) => {
       if (phase === 'awaitingAck' && data.length > 0) {
@@ -567,6 +555,7 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
         // Start streaming file data
         const stream = fs.createReadStream(filePath, { start: resumeOffset, highWaterMark: 256 * 1024 });
+        txStream = stream;
 
         stream.on('data', (chunk: Buffer) => {
           // Pause stream until chunk is sent (backpressure)
@@ -611,36 +600,21 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     client.on('close', () => {
       console.log(`[NodeTX] Socket closed.`);
-      txSocket = null;
-      if (phase === 'awaitingAck' && (receiverStatus === STATUS_OK || (receiverStatus === null && receiverClosed))) {
-        console.log(`[NodeTX] Transfer complete: ${txCurrentFileName}`);
-        phase = 'done';
-        if (seq === transferSeq) transferState = TransferState.Completed;
-      }
-      if (phase !== 'done' && seq === transferSeq) {
-        // Connect failed or the connection dropped mid-file
+      if (seq === txSeq) {
+        txSocket = null;
+        txStream = null;
         txBytesTransferred = 0;
         txTotalBytes = 0;
-        transferState = TransferState.Failed;
+        txCurrentFileName = '';
+        txCurrentFileSize = 0;
       }
-      // Reset state after a brief delay
-      setTimeout(() => {
-        if (!txSocket) {
-          txBytesTransferred = 0;
-          txTotalBytes = 0;
-          txCurrentFileName = '';
-          txCurrentFileSize = 0;
-        }
-      }, 1500);
+      const delivered = phase === 'awaitingAck' && receiverStatus === STATUS_OK;
+      if (delivered) console.log(`[NodeTX] Transfer complete: ${sentName}`);
+      transferEvents.push({ incoming: false, fileName: sentName, fileSize: sentSize, success: delivered });
     });
 
     client.on('error', (err) => {
       console.error(`[NodeTX] Socket error:`, err.message);
-      // A receiver without status support can reset as it closes after the last byte
-      if (phase === 'awaitingAck' && (err as NodeJS.ErrnoException).code === 'ECONNRESET') {
-        receiverClosed = true;
-      }
-      txSocket = null;
     });
 
     event.returnValue = true;
@@ -677,8 +651,9 @@ ipcMain.on('engine:getProgress', (event) => {
   catch { event.returnValue = 0; }
 });
 
-ipcMain.on('engine:getTransferState', (event) => {
-  event.returnValue = transferState;
+ipcMain.on('engine:takeTransferEvents', (event) => {
+  event.returnValue = transferEvents;
+  transferEvents = [];
 });
 
 ipcMain.on('engine:cancelTransfer', (event) => {
@@ -692,6 +667,18 @@ ipcMain.on('engine:cancelTransfer', (event) => {
   txBytesTransferred = 0; txTotalBytes = 0;
   txCurrentFileName = ''; txCurrentFileSize = 0;
 
+  event.returnValue = null;
+});
+
+// Stops only the outgoing file; the receiver keeps running
+ipcMain.on('engine:cancelSend', (event) => {
+  if (txStream && txSocket) {
+    // Chunks are written whole, so the END marker lands on a chunk boundary
+    txStream.destroy();
+    txSocket.end(Buffer.alloc(4, 0));
+  } else if (txSocket) {
+    txSocket.destroy();
+  }
   event.returnValue = null;
 });
 
