@@ -7,6 +7,7 @@ import {
 import ChooseRoleScreen from '../screens/ChooseRoleScreen';
 import DevicePickerScreen from '../screens/DevicePickerScreen';
 import SessionScreen from '../screens/SessionScreen';
+import { FileTransferRecord, PickedFile } from '../types/transfer';
 
 export type RootStackParamList = {
   ChooseRole: undefined;
@@ -34,38 +35,25 @@ type NavigatorProps = {
     address: string;
     role: 'send' | 'receive';
   } | null;
-  pickedFile: {
-    name: string;
-    uri: string;
-    size?: number | null;
-    path: string;
-  } | null;
+  pickedFiles: PickedFile[];
   isPickingFile: boolean;
   pickerError: string | null;
   transferMode: 'idle' | 'sending' | 'receiving';
   progress: number;
   transferPort: number;
-  sentFiles: Array<{
-    id: string;
-    fileName: string;
-    fileSize?: number;
-    timestamp: Date;
-    status: 'completed' | 'cancelled' | 'in-progress';
-  }>;
-  receivedFiles: Array<{
-    id: string;
-    fileName: string;
-    fileSize?: number;
-    timestamp: Date;
-    status: 'completed' | 'cancelled' | 'in-progress';
-  }>;
+  sentFiles: FileTransferRecord[];
+  receivedFiles: FileTransferRecord[];
 
   onChooseRole: (role: 'send' | 'receive') => void;
   onSelectDevice: (device: any) => void;
   onBack: () => void;
   onPickFile: () => void;
-  onSendFile: () => void;
-  onCancelTransfer: () => void;
+  onSendFiles: () => void;
+  onCancelPick: () => void;
+  onRemovePick: (index: number) => void;
+  onCancelTransfer: (id?: string) => void;
+  onCancelAllSends: () => void;
+  onOpenFile: (file: FileTransferRecord) => void;
   onTerminate: () => void;
 };
 
@@ -73,7 +61,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
   role,
   devices,
   sessionPeer,
-  pickedFile,
+  pickedFiles,
   isPickingFile,
   pickerError,
   transferMode,
@@ -85,8 +73,12 @@ const RootNavigator: React.FC<NavigatorProps> = ({
   onSelectDevice,
   onBack,
   onPickFile,
-  onSendFile,
+  onSendFiles,
+  onCancelPick,
+  onRemovePick,
   onCancelTransfer,
+  onCancelAllSends,
+  onOpenFile,
   onTerminate,
 }) => {
   return (
@@ -94,7 +86,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-            cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
         }}
       >
         {!role ? (
@@ -119,7 +111,7 @@ const RootNavigator: React.FC<NavigatorProps> = ({
                 sessionPeer={sessionPeer}
                 role={role}
                 transferPort={transferPort}
-                pickedFile={pickedFile}
+                pickedFiles={pickedFiles}
                 isPickingFile={isPickingFile}
                 pickerError={pickerError}
                 transferMode={transferMode}
@@ -127,8 +119,12 @@ const RootNavigator: React.FC<NavigatorProps> = ({
                 sentFiles={sentFiles}
                 receivedFiles={receivedFiles}
                 onPickFile={onPickFile}
-                onSendFile={onSendFile}
+                onSendFiles={onSendFiles}
+                onCancelPick={onCancelPick}
+                onRemovePick={onRemovePick}
                 onCancelTransfer={onCancelTransfer}
+                onCancelAllSends={onCancelAllSends}
+                onOpenFile={onOpenFile}
                 onTerminate={onTerminate}
               />
             )}

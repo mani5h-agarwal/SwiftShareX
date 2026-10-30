@@ -1,26 +1,16 @@
 // @react-native-documents/picker mock for Electron desktop
-// App.tsx uses: pickSingle, pick, keepLocalCopy, isCancel, types
+// App.tsx uses: pick, keepLocalCopy, isErrorWithCode, errorCodes, types
 
 const CANCEL_ERR = 'User cancelled document picking.';
 
 export const pick = async (_opts?: any) => {
-    const file = await (window as any).swiftshareIPC.pickDocument();
-    if (!file) {
+    const files = await (window as any).swiftshareIPC.pickDocument();
+    if (!files) {
         const err: any = new Error(CANCEL_ERR);
         err.code = 'DOCUMENT_PICKER_CANCELED';
         throw err;
     }
-    return [file];
-};
-
-export const pickSingle = async (_opts?: any) => {
-    const file = await (window as any).swiftshareIPC.pickDocument();
-    if (!file) {
-        const err: any = new Error(CANCEL_ERR);
-        err.code = 'DOCUMENT_PICKER_CANCELED';
-        throw err;
-    }
-    return file;
+    return files;
 };
 
 // keepLocalCopy: on desktop we copy to a temporary "cache" directory so that
@@ -40,6 +30,10 @@ export const keepLocalCopy = async (opts: { files: Array<{ uri: string; fileName
     }
     return results;
 };
+
+export const errorCodes = { OPERATION_CANCELED: 'DOCUMENT_PICKER_CANCELED' };
+
+export const isErrorWithCode = (err: any): boolean => typeof err?.code === 'string';
 
 export const isCancel = (err: any): boolean => {
     return (
@@ -61,8 +55,9 @@ export const types = {
 
 export default {
     pick,
-    pickSingle,
     keepLocalCopy,
     isCancel,
+    errorCodes,
+    isErrorWithCode,
     types,
 };

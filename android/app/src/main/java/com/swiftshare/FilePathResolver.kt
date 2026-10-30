@@ -1,6 +1,7 @@
 package com.swiftshare
 
 import android.content.Context
+import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import java.io.File
@@ -34,14 +35,30 @@ object FilePathResolver {
         }
     }
 
+    // Hands the caller ownership of the returned file descriptor; -1 on failure
+    @JvmStatic // JNI entrypoint
+    fun openForRead(context: Context, uri: String): Int {
+        return try {
+            context.contentResolver.openFileDescriptor(Uri.parse(uri), "r")?.detachFd() ?: -1
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open $uri", e)
+            -1
+        }
+    }
+
     private fun sanitizeName(filename: String): String {
+        // The name comes from the sender; keep only the last path segment so it
+        // can't point outside the SwiftShareX folder
+        var name = filename.substringAfterLast('/').substringAfterLast('\\')
+        name = name.filter { !it.isISOControl() }
+
         val pendingPattern = Regex("^\\.pending-\\d+-")
-        var name = filename.replace(pendingPattern, "")
+        name = name.replace(pendingPattern, "")
         name = name.removePrefix(".pending-")
         if (name.startsWith('.')) {
             name = name.removePrefix(".")
         }
-        if (name.isBlank()) {
+        if (name.isBlank() || name == "." || name == "..") {
             name = "file"
         }
         return name

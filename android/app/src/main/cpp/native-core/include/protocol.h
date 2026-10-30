@@ -30,6 +30,9 @@ constexpr uint8_t MODE_RECEIVE = 2;
 // Status Codes
 // ===============================
 
+// Sent by the receiver as one byte after the end marker, once the file is
+// saved (STATUS_OK) or has failed (STATUS_ERROR). Receivers from before this
+// existed just close the connection.
 constexpr uint8_t STATUS_OK = 0x00;
 constexpr uint8_t STATUS_ERROR = 0x01;
 
@@ -69,5 +72,9 @@ struct DataChunkHeader {
 // ===============================
 
 constexpr uint8_t END_OF_TRANSFER = 0xFF;
+
+// Largest chunk a receiver will accept; it allocates a buffer of the
+// sender's chunkSize, so this stops a bad sender exhausting memory
+constexpr uint32_t MAX_CHUNK_SIZE = 4 * 1024 * 1024;
 
 } // namespace swiftshare

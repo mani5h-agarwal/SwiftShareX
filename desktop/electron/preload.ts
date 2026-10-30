@@ -2,17 +2,30 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // ── Engine functions: MUST be synchronous because App.tsx calls them without await ──
 // Use sendSync so the return value is available immediately.
-contextBridge.exposeInMainWorld('startReceiver', (port: number): boolean =>
-  ipcRenderer.sendSync('engine:startReceiver', port)
+contextBridge.exposeInMainWorld('startReceiver', (port: number, peerIp: string): boolean =>
+  ipcRenderer.sendSync('engine:startReceiver', port, peerIp)
 );
 contextBridge.exposeInMainWorld('startSender', (filePath: string, ip: string, port: number): boolean =>
   ipcRenderer.sendSync('engine:startSender', filePath, ip, port)
 );
+// Desktop files are plain paths, so they can always be read in place
+contextBridge.exposeInMainWorld('canSendDirectly', (uri: string): boolean =>
+  uri.startsWith('file://')
+);
+contextBridge.exposeInMainWorld('startSenderDirect', (uri: string, _name: string, ip: string, port: number): boolean =>
+  ipcRenderer.sendSync('engine:startSender', uri.slice('file://'.length), ip, port)
+);
 contextBridge.exposeInMainWorld('getProgress', (): number =>
   ipcRenderer.sendSync('engine:getProgress')
 );
+contextBridge.exposeInMainWorld('takeTransferEvents', (): any[] =>
+  ipcRenderer.sendSync('engine:takeTransferEvents')
+);
 contextBridge.exposeInMainWorld('cancelTransfer', (): void =>
   ipcRenderer.sendSync('engine:cancelTransfer')
+);
+contextBridge.exposeInMainWorld('cancelSend', (): void =>
+  ipcRenderer.sendSync('engine:cancelSend')
 );
 contextBridge.exposeInMainWorld('getCurrentFileName', (): string =>
   ipcRenderer.sendSync('engine:getCurrentFileName')
@@ -30,6 +43,7 @@ contextBridge.exposeInMainWorld('swiftshareIPC', {
   fsUnlink: (path: string) => ipcRenderer.invoke('fs:unlink', path),
   fsCopyToCache: (path: string) => ipcRenderer.invoke('fs:copyToCache', path),
   openDownloadsFolder: () => ipcRenderer.invoke('openDownloadsFolder'),
+  openReceivedFile: (filePath: string) => ipcRenderer.invoke('openReceivedFile', filePath),
   udpCreateSocket: (id: string) => ipcRenderer.invoke('udp:createSocket', id),
   udpBind: (id: string, port: number) => ipcRenderer.invoke('udp:bind', id, port),
   udpSend: (id: string, msg: string, port: number, address: string) =>

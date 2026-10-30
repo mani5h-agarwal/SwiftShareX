@@ -1,20 +1,57 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
-import { Alert, NativeModules, Platform } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  Alert,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from 'react-native-safe-area-context';
 import dgram, { RemoteInfo, Socket } from 'react-native-udp';
 import * as DocumentPicker from '@react-native-documents/picker';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import RootNavigator from './src/navigation/RootNavigator';
+import { FileTransferRecord, PickedFile } from './src/types/transfer';
+
+// Matches TransferEvent in the native engines
+type TransferEvent = {
+  incoming: boolean;
+  fileName: string;
+  fileSize: number;
+  success: boolean;
+  stoppedBySender?: boolean;
+  savedPath?: string;
+};
+
+type QueuedSend = {
+  id: string;
+  file: PickedFile;
+  address: string;
+  cancelled?: boolean;
+};
 
 declare global {
-  var startReceiver: (port: number) => boolean;
+  // Only accepts connections from peerIp
+  var startReceiver: (port: number, peerIp: string) => boolean;
   var startSender: (path: string, ip: string, port: number) => boolean;
+  // Whether a picked file can be read in place, without a local copy
+  var canSendDirectly: (uri: string) => boolean;
+  var startSenderDirect: (
+    uri: string,
+    name: string,
+    ip: string,
+    port: number,
+  ) => boolean;
   var getProgress: () => number;
   var cancelTransfer: () => void;
+  var cancelSend: () => void;
   var getCurrentFileName: () => string;
   var getCurrentFileSize: () => number;
+  var takeTransferEvents: () => TransferEvent[];
 }
 
 const DISCOVERY_PORT = 41234;
@@ -24,13 +61,9 @@ const HELLO_PREFIX = 'SWIFTSHAREX_HELLO';
 const LOCK_PREFIX = 'SWIFTSHAREX_LOCK';
 const BYE_PREFIX = 'SWIFTSHAREX_BYE';
 const CANCEL_PREFIX = 'SWIFTSHAREX_CANCEL';
+const SKIP_PREFIX = 'SWIFTSHAREX_SKIP';
 const TRANSFER_PORT = 5001;
 const SEND_START_TIMEOUT_MS = 8000;
-
-const initialWindowMetrics = {
-  frame: { x: 0, y: 0, width: 0, height: 0 },
-  insets: { top: 0, left: 0, right: 0, bottom: 0 },
-};
 
 type Role = 'send' | 'receive';
 type DiscoveredDevice = {
@@ -41,21 +74,6 @@ type DiscoveredDevice = {
 };
 
 type TransferMode = 'idle' | 'sending' | 'receiving';
-
-type PickedFile = {
-  name: string;
-  uri: string;
-  size?: number | null;
-  path: string;
-};
-
-type FileTransferRecord = {
-  id: string;
-  fileName: string;
-  fileSize?: number;
-  timestamp: Date;
-  status: 'completed' | 'cancelled' | 'in-progress';
-};
 
 function App() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -68,12 +86,8 @@ function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transferMode, setTransferMode] = useState<TransferMode>('idle');
 
-  // Keep ref in sync with state
-  useEffect(() => {
-    currentTransferModeRef.current = transferMode;
-  }, [transferMode]);
   const [progress, setProgress] = useState<number>(0);
-  const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
+  const [pickedFiles, setPickedFiles] = useState<PickedFile[]>([]);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [sentFiles, setSentFiles] = useState<FileTransferRecord[]>([]);
   const [receivedFiles, setReceivedFiles] = useState<FileTransferRecord[]>([]);
@@ -88,8 +102,10 @@ function App() {
     null,
   );
   const closingDiscoveryRef = useRef<boolean>(false);
-  const currentTransferIdRef = useRef<string | null>(null);
-  const currentTransferModeRef = useRef<TransferMode>('idle');
+  // Files waiting to send, and the one sending now
+  const sendQueueRef = useRef<QueuedSend[]>([]);
+  const currentSendRef = useRef<QueuedSend | null>(null);
+  const currentReceiveIdRef = useRef<string | null>(null);
   const progressRef = useRef<number>(0);
   const justCancelledRef = useRef<boolean>(false);
   const localCopyPathRef = useRef<string | null>(null);
@@ -194,6 +210,21 @@ function App() {
     }
   };
 
+  // Asks the sender to stop only the file it is sending us
+  const sendSkip = (
+    sock: Socket,
+    targetAddr: string,
+    currentSessionId: string,
+  ) => {
+    try {
+      const fileSize = globalThis.getCurrentFileSize?.() ?? 0;
+      const skip = `${SKIP_PREFIX}|${currentSessionId}|${deviceId}|${fileSize}`;
+      sock.send(skip, 0, skip.length, DISCOVERY_PORT, targetAddr);
+    } catch (e) {
+      console.warn('sendSkip failed:', e);
+    }
+  };
+
   const sendCancel = (
     sock: Socket,
     targetAddr: string,
@@ -254,6 +285,16 @@ function App() {
   const startProgressPolling = () => {
     stopProgressPolling();
     progressTimerRef.current = setInterval(() => {
+      // Handle finished transfers first, so progress below belongs to whichever
+      // transfer is running now
+      globalThis.takeTransferEvents?.().forEach(event => {
+        if (event.incoming) {
+          handleReceiveFinished(event);
+        } else {
+          handleSendFinished(event);
+        }
+      });
+
       const p = globalThis.getProgress?.();
       if (typeof p === 'number') {
         setProgress(p);
@@ -269,79 +310,145 @@ function App() {
           justCancelledRef.current = false;
         }
 
-        // If progress is happening (> 0 but < 1) and we're idle, switch to receiving
+        // Progress with nothing being sent means a file is arriving
         // But don't create a new transfer if we just cancelled (residual progress)
-        if (p > 0 && p < 1 && !justCancelledRef.current) {
-          setTransferMode(prev => {
-            if (prev === 'idle') {
-              const fileName =
-                globalThis.getCurrentFileName?.() || 'Unknown File';
-              const fileSize = globalThis.getCurrentFileSize?.() || undefined;
-              // Start tracking a new receiving transfer
-              const transferId = `recv-${Date.now()}`;
-              currentTransferIdRef.current = transferId;
-              setReceivedFiles(prevFiles => [
-                {
-                  id: transferId,
-                  fileName: fileName,
-                  fileSize: fileSize,
-                  timestamp: new Date(),
-                  status: 'in-progress',
-                },
-                ...prevFiles,
-              ]);
-              return 'receiving';
-            }
-            return prev;
-          });
-        }
-        // When transfer completes
-        if (p >= 1) {
-          // Capture current mode before setTimeout
-          setTransferMode(currentMode => {
-            const wasSending = currentMode === 'sending';
-            const wasReceiving = currentMode === 'receiving';
-            const transferId = currentTransferIdRef.current;
-            const finishedSendPath = localCopyPathRef.current;
-
-            // Small delay to show 100% before resetting
-            setTimeout(() => {
-              // Update transfer record to completed
-              if (wasSending && transferId) {
-                setSentFiles(prevFiles =>
-                  prevFiles.map(f =>
-                    f.id === transferId
-                      ? { ...f, status: 'completed' as const }
-                      : f,
-                  ),
-                );
-              } else if (wasReceiving && transferId) {
-                setReceivedFiles(prevFiles =>
-                  prevFiles.map(f =>
-                    f.id === transferId
-                      ? { ...f, status: 'completed' as const }
-                      : f,
-                  ),
-                );
-              }
-
-              setTransferMode('idle');
-              setProgress(0);
-              progressRef.current = 0;
-              currentTransferIdRef.current = null;
-              cleanupLocalCopy(finishedSendPath);
-
-              if (wasSending) {
-                setPickedFile(null);
-                setPickerError(null);
-              }
-            }, 500);
-            clearSendStartTimeout();
-            return currentMode; // Don't change mode yet
-          });
+        if (
+          p > 0 &&
+          p < 1 &&
+          !justCancelledRef.current &&
+          !currentSendRef.current &&
+          !currentReceiveIdRef.current
+        ) {
+          const transferId = `recv-${Date.now()}`;
+          currentReceiveIdRef.current = transferId;
+          setReceivedFiles(prevFiles => [
+            {
+              id: transferId,
+              fileName: globalThis.getCurrentFileName?.() || 'Unknown File',
+              fileSize: globalThis.getCurrentFileSize?.() || undefined,
+              timestamp: new Date(),
+              status: 'in-progress',
+            },
+            ...prevFiles,
+          ]);
+          setTransferMode('receiving');
         }
       }
     }, 250);
+  };
+
+  const setSentStatus = (
+    ids: string[],
+    status: FileTransferRecord['status'],
+  ) => {
+    setSentFiles(prevFiles =>
+      prevFiles.map(f => (ids.includes(f.id) ? { ...f, status } : f)),
+    );
+  };
+
+  const setReceivedStatus = (
+    id: string,
+    status: FileTransferRecord['status'],
+  ) => {
+    setReceivedFiles(prevFiles =>
+      prevFiles.map(f => (f.id === id ? { ...f, status } : f)),
+    );
+  };
+
+  const resetToIdle = () => {
+    setTransferMode('idle');
+    setProgress(0);
+    progressRef.current = 0;
+  };
+
+  const handleReceiveFinished = (event: TransferEvent) => {
+    const transferId = currentReceiveIdRef.current;
+    currentReceiveIdRef.current = null;
+
+    if (transferId) {
+      setReceivedFiles(prevFiles =>
+        prevFiles.map(f =>
+          f.id === transferId
+            ? {
+                ...f,
+                status: event.success ? 'completed' : 'cancelled',
+                savedPath: event.savedPath,
+              }
+            : f,
+        ),
+      );
+    } else if (event.success) {
+      // A small file can finish between polls without ever showing progress
+      setReceivedFiles(prevFiles => [
+        {
+          id: `recv-${Date.now()}-${prevFiles.length}`,
+          fileName: event.fileName,
+          fileSize: event.fileSize || undefined,
+          savedPath: event.savedPath,
+          timestamp: new Date(),
+          status: 'completed',
+        },
+        ...prevFiles,
+      ]);
+    }
+
+    if (!currentSendRef.current) {
+      resetToIdle();
+    }
+    if (transferId && !event.success && !event.stoppedBySender) {
+      Alert.alert(
+        'Receive failed',
+        'The connection was lost before the file finished downloading.',
+      );
+    }
+  };
+
+  const handleSendFinished = (event: TransferEvent) => {
+    const current = currentSendRef.current;
+    // Ignore a transfer we already gave up on or cancelled
+    if (!current || current.file.name !== event.fileName) return;
+
+    clearSendStartTimeout();
+    currentSendRef.current = null;
+    setSentStatus([current.id], event.success ? 'completed' : 'cancelled');
+    cleanupLocalCopy();
+
+    if (event.success || current.cancelled) {
+      startNextSend();
+    } else {
+      failSendQueue(
+        'The connection was lost before the file finished sending. Please try again.',
+      );
+    }
+  };
+
+  // Marks everything still waiting as not sent
+  const failSendQueue = (message: string) => {
+    const remaining = sendQueueRef.current.map(item => item.id);
+    sendQueueRef.current = [];
+    setSentStatus(remaining, 'cancelled');
+    resetToIdle();
+    setPickerError(message);
+    Alert.alert(
+      'Send failed',
+      remaining.length > 0
+        ? `${message}\n\n${remaining.length} more ${
+            remaining.length === 1 ? 'file was' : 'files were'
+          } not sent.`
+        : message,
+    );
+  };
+
+  const restartReceiver = (peerAddress: string) => {
+    // Cancelling also stops the receiver, so it has to be started again
+    setTimeout(() => {
+      try {
+        const ok = globalThis.startReceiver?.(TRANSFER_PORT, peerAddress);
+        if (ok) {
+          startProgressPolling();
+        }
+      } catch {}
+    }, 100);
   };
 
   const handleMessage =
@@ -393,7 +500,7 @@ function App() {
         stopBroadcasting();
         setTransferMode('idle');
         setProgress(0);
-        setPickedFile(null);
+        setPickedFiles([]);
         return;
       }
 
@@ -411,6 +518,19 @@ function App() {
         return;
       }
 
+      if (text.startsWith(SKIP_PREFIX)) {
+        const [, , peerId, fileSize] = text.split('|');
+        const current = currentSendRef.current;
+        if (peerId === deviceId || !current) return;
+        if (current.address !== rinfo.address) return;
+
+        // Size tells us the peer still means this file, not one that just ended
+        if (!current.file.size || current.file.size === Number(fileSize)) {
+          stopCurrentSend();
+        }
+        return;
+      }
+
       if (text.startsWith(CANCEL_PREFIX)) {
         const [, incomingSessionId, peerId] = text.split('|');
         if (peerId === deviceId) return;
@@ -424,53 +544,7 @@ function App() {
 
             if (shouldCancel) {
               // Peer cancelled their transfer
-              try {
-                globalThis.cancelTransfer?.();
-              } catch {}
-
-              // Set flag to prevent creating duplicate transfer entries
-              justCancelledRef.current = true;
-
-              // Mark current transfer as cancelled using ref for mode
-              const transferId = currentTransferIdRef.current;
-              const mode = currentTransferModeRef.current;
-
-              if (transferId) {
-                if (mode === 'sending') {
-                  setSentFiles(prevFiles =>
-                    prevFiles.map(f =>
-                      f.id === transferId
-                        ? { ...f, status: 'cancelled' as const }
-                        : f,
-                    ),
-                  );
-                } else if (mode === 'receiving') {
-                  setReceivedFiles(prevFiles =>
-                    prevFiles.map(f =>
-                      f.id === transferId
-                        ? { ...f, status: 'cancelled' as const }
-                        : f,
-                    ),
-                  );
-                }
-              }
-
-              stopProgressPolling();
-              setTransferMode('idle');
-              setProgress(0);
-              setPickedFile(null);
-              currentTransferIdRef.current = null;
-              cleanupLocalCopy();
-
-              // Restart the receiver so we can accept new transfers
-              setTimeout(() => {
-                try {
-                  const ok = globalThis.startReceiver?.(TRANSFER_PORT);
-                  if (ok) {
-                    startProgressPolling();
-                  }
-                } catch {}
-              }, 100);
+              abortTransfers(currentPeer?.address ?? '');
             }
 
             return currentPeer;
@@ -481,11 +555,31 @@ function App() {
       }
     };
 
+  // Android 7-10 can't save received files into Downloads without this.
+  // (Android 10 also relies on requestLegacyExternalStorage in the manifest.)
+  const ensureStoragePermission = async () => {
+    if (Platform.OS !== 'android' || Number(Platform.Version) >= 30) return;
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      );
+      if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert(
+          'Storage access needed',
+          "Without storage access, files sent to this device can't be saved to Downloads.",
+        );
+      }
+    } catch (e) {
+      console.warn('Storage permission request failed:', e);
+    }
+  };
+
   const startDiscovery = (nextRole: Role) => {
+    ensureStoragePermission();
     setRole(nextRole);
     setSessionPeer(null);
     setSessionId(null);
-    setPickedFile(null);
+    setPickedFiles([]);
     setProgress(0);
     setTransferMode('idle');
     setDevices([]);
@@ -611,59 +705,29 @@ function App() {
     setIsPickingFile(true); // 🔒 picker starts
     try {
       setPickerError(null);
-      await cleanupLocalCopy();
 
-      const picker = DocumentPicker.pickSingle
-        ? DocumentPicker.pickSingle
-        : async (opts: any) => {
-            const r = await DocumentPicker.pick({
-              ...opts,
-              allowMultiSelection: false,
-            });
-            return Array.isArray(r) ? r[0] : r;
-          };
-
-      const res = await picker({
+      const picked = await DocumentPicker.pick({
         presentationStyle: 'fullScreen',
         mode: 'import',
-        type: DocumentPicker.types?.allFiles || undefined,
+        type: DocumentPicker.types.allFiles,
+        allowMultiSelection: true,
       });
 
-      const copyResults = await DocumentPicker.keepLocalCopy({
-        files: [
-          {
-            uri: res.uri,
-            fileName: res.name ?? 'file',
-          },
-        ],
-        destination: 'cachesDirectory',
-      });
-
-      const copyResult = Array.isArray(copyResults)
-        ? copyResults[0]
-        : copyResults;
-
-      if (copyResult.status !== 'success') {
-        setPickedFile(null);
-        setPickerError(
-          'Could not create a local copy of this file. Please choose a different file from local storage.',
-        );
-        return; // still safe
-      }
-
-      const path = uriToPath(copyResult.localUri);
-      localCopyPathRef.current = path;
-
-      setPickedFile({
-        name: res.name ?? 'file',
-        uri: res.uri,
-        size: res.size,
-        path,
-      });
+      setPickedFiles(
+        picked.map(file => ({
+          name: file.name ?? 'file',
+          uri: file.uri,
+          size: file.size,
+        })),
+      );
     } catch (err: any) {
       // Silent cancel
-      // @ts-ignore
-      if (DocumentPicker?.isCancel?.(err)) return;
+      if (
+        DocumentPicker.isErrorWithCode(err) &&
+        err.code === DocumentPicker.errorCodes.OPERATION_CANCELED
+      ) {
+        return;
+      }
 
       setPickerError('Failed to pick file. Try again.');
     } finally {
@@ -671,79 +735,112 @@ function App() {
     }
   };
 
-  const handleSendFailure = (message: string) => {
-    clearSendStartTimeout();
-    try {
-      globalThis.cancelTransfer?.();
-    } catch {}
-
-    stopProgressPolling();
-
-    const transferId = currentTransferIdRef.current;
-    if (transferId) {
-      setSentFiles(prevFiles => prevFiles.filter(f => f.id !== transferId));
-    }
-
-    currentTransferIdRef.current = null;
-    setTransferMode('idle');
-    setProgress(0);
-    progressRef.current = 0;
-    setPickedFile(null);
-    setPickerError(message);
-    cleanupLocalCopy();
-    Alert.alert('Send failed', message);
+  // Files that can't be read in place (e.g. cloud documents) get a temporary
+  // copy, made only when their turn comes so a big selection doesn't fill storage
+  const makeLocalCopy = async (file: PickedFile) => {
+    const [copyResult] = await DocumentPicker.keepLocalCopy({
+      files: [{ uri: file.uri, fileName: file.name }],
+      destination: 'cachesDirectory',
+    });
+    return copyResult.status === 'success'
+      ? uriToPath(copyResult.localUri)
+      : null;
   };
 
-  const sendFile = () => {
-    if (!sessionPeer || !pickedFile) return;
-    const path = pickedFile.path;
-    if (!path) {
-      setPickerError('File is not accessible locally. Pick again.');
+  const startNextSend = async () => {
+    const next = sendQueueRef.current.shift();
+    if (!next) {
+      resetToIdle();
       return;
     }
 
-    clearSendStartTimeout();
-
-    const ok = globalThis.startSender?.(
-      path,
-      sessionPeer.address,
-      TRANSFER_PORT,
-    );
-    if (!ok) {
-      handleSendFailure('Could not start the transfer. Please try again.');
-      return;
-    }
-
-    // Track the sending transfer
-    const transferId = `send-${Date.now()}`;
-    currentTransferIdRef.current = transferId;
-    setSentFiles(prevFiles => [
-      {
-        id: transferId,
-        fileName: pickedFile.name,
-        fileSize: pickedFile.size || undefined,
-        timestamp: new Date(),
-        status: 'in-progress',
-      },
-      ...prevFiles,
-    ]);
-
+    currentSendRef.current = next;
+    setSentStatus([next.id], 'in-progress');
     setTransferMode('sending');
     setProgress(0);
     progressRef.current = 0;
-    startProgressPolling();
+
+    let ok: boolean | undefined;
+    try {
+      if (globalThis.canSendDirectly?.(next.file.uri)) {
+        ok = globalThis.startSenderDirect?.(
+          next.file.uri,
+          next.file.name,
+          next.address,
+          TRANSFER_PORT,
+        );
+      } else {
+        const path = await makeLocalCopy(next.file);
+        // The batch may have been cancelled during the copy
+        if (currentSendRef.current !== next) {
+          await cleanupLocalCopy(path);
+          return;
+        }
+        // Just this file was cancelled during the copy
+        if (next.cancelled) {
+          await cleanupLocalCopy(path);
+          currentSendRef.current = null;
+          startNextSend();
+          return;
+        }
+        localCopyPathRef.current = path;
+        ok = path
+          ? globalThis.startSender?.(path, next.address, TRANSFER_PORT)
+          : false;
+      }
+    } catch (e) {
+      console.warn('Could not start sending:', e);
+    }
+
+    if (!ok) {
+      currentSendRef.current = null;
+      setSentStatus([next.id], 'cancelled');
+      failSendQueue('Could not start the transfer. Please try again.');
+      return;
+    }
 
     // Failsafe: if progress never advances, time out and reset state so the user can retry.
+    clearSendStartTimeout();
     sendStartTimeoutRef.current = setTimeout(() => {
-      if (
-        currentTransferModeRef.current === 'sending' &&
-        (progressRef.current ?? 0) < 0.01
-      ) {
-        handleSendFailure(
+      if (currentSendRef.current === next && progressRef.current < 0.01) {
+        globalThis.cancelTransfer?.();
+        currentSendRef.current = null;
+        setSentStatus([next.id], 'cancelled');
+        cleanupLocalCopy();
+        failSendQueue(
           'Transfer did not start in time. Please ensure the peer is reachable and retry.',
         );
+        restartReceiver(next.address);
       }
     }, SEND_START_TIMEOUT_MS);
+  };
+
+  const sendFiles = () => {
+    if (!sessionPeer || pickedFiles.length === 0) return;
+
+    const batchId = Date.now();
+    const queued = pickedFiles.map((file, index) => ({
+      id: `send-${batchId}-${index}`,
+      file,
+      address: sessionPeer.address,
+    }));
+
+    setSentFiles(prevFiles => [
+      ...queued.map(item => ({
+        id: item.id,
+        fileName: item.file.name,
+        fileSize: item.file.size || undefined,
+        timestamp: new Date(),
+        status: 'queued' as const,
+      })),
+      ...prevFiles,
+    ]);
+    setPickedFiles([]);
+
+    sendQueueRef.current.push(...queued);
+    if (!currentSendRef.current) {
+      startNextSend();
+    }
   };
 
   // UI state helpers now handled in SessionScreen
@@ -752,7 +849,7 @@ function App() {
     if (sessionPeer) {
       // Start the receiver but keep in idle mode
       // It will automatically switch to 'receiving' when data arrives
-      const ok = globalThis.startReceiver?.(TRANSFER_PORT);
+      const ok = globalThis.startReceiver?.(TRANSFER_PORT, sessionPeer.address);
       if (ok) {
         startProgressPolling();
       }
@@ -760,7 +857,9 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionPeer]);
 
-  const cancelOngoingTransfer = () => {
+  // Stops everything in progress or waiting; the peer has already been told, or
+  // told us
+  const abortTransfers = (peerAddress: string) => {
     try {
       globalThis.cancelTransfer?.();
     } catch {}
@@ -770,44 +869,94 @@ function App() {
     // Set flag to prevent creating duplicate transfer entries
     justCancelledRef.current = true;
 
+    const current = currentSendRef.current;
+    const unsent = [
+      ...(current ? [current.id] : []),
+      ...sendQueueRef.current.map(item => item.id),
+    ];
+    currentSendRef.current = null;
+    sendQueueRef.current = [];
+    setSentStatus(unsent, 'cancelled');
+
+    if (currentReceiveIdRef.current) {
+      setReceivedStatus(currentReceiveIdRef.current, 'cancelled');
+      currentReceiveIdRef.current = null;
+    }
+
+    stopProgressPolling();
+    resetToIdle();
+    setPickedFiles([]);
+    cleanupLocalCopy();
+
+    // Restart the receiver so we can accept new transfers
+    restartReceiver(peerAddress);
+  };
+
+  // Stops just the running file; the next one starts once the engine reports it
+  // has stopped
+  const stopCurrentSend = () => {
+    const current = currentSendRef.current;
+    if (!current || current.cancelled) return;
+
+    current.cancelled = true;
+    setSentStatus([current.id], 'cancelled');
+    globalThis.cancelSend?.();
+  };
+
+  const cancelOngoingTransfer = (id?: string) => {
+    // A file that hasn't started can just be taken out of the queue
+    const queued = sendQueueRef.current.find(item => item.id === id);
+    if (queued) {
+      sendQueueRef.current = sendQueueRef.current.filter(i => i !== queued);
+      setSentStatus([queued.id], 'cancelled');
+      return;
+    }
+
+    if (currentSendRef.current?.id === id) {
+      stopCurrentSend();
+      return;
+    }
+
+    // The sender stops this file and carries on with the rest of its batch
+    if (id && id === currentReceiveIdRef.current) {
+      setReceivedStatus(id, 'cancelled');
+      if (discoverySocketRef.current && sessionPeer && sessionId) {
+        sendSkip(discoverySocketRef.current, sessionPeer.address, sessionId);
+      }
+      return;
+    }
+
     // Notify peer about cancellation
     if (discoverySocketRef.current && sessionPeer && sessionId) {
       sendCancel(discoverySocketRef.current, sessionPeer.address, sessionId);
     }
 
-    // Mark current transfer as cancelled
-    const transferId = currentTransferIdRef.current;
-    if (transferId && transferMode === 'sending') {
-      setSentFiles(prevFiles =>
-        prevFiles.map(f =>
-          f.id === transferId ? { ...f, status: 'cancelled' as const } : f,
-        ),
-      );
-    } else if (transferId && transferMode === 'receiving') {
-      setReceivedFiles(prevFiles =>
-        prevFiles.map(f =>
-          f.id === transferId ? { ...f, status: 'cancelled' as const } : f,
-        ),
-      );
+    abortTransfers(sessionPeer?.address ?? '');
+  };
+
+  // Stops this batch only; anything arriving from the peer keeps going
+  const cancelAllSends = () => {
+    const waiting = sendQueueRef.current.map(item => item.id);
+    sendQueueRef.current = [];
+    setSentStatus(waiting, 'cancelled');
+    stopCurrentSend();
+  };
+
+  const openReceivedFile = async ({ savedPath }: FileTransferRecord) => {
+    if (!savedPath) return;
+
+    // Desktop shows its own message if the file can't be opened
+    const ipc = (globalThis as any).swiftshareIPC;
+    if (ipc) {
+      ipc.openReceivedFile(savedPath);
+      return;
     }
 
-    stopProgressPolling();
-    setTransferMode('idle');
-    setProgress(0);
-    progressRef.current = 0;
-    setPickedFile(null);
-    currentTransferIdRef.current = null;
-    cleanupLocalCopy();
-
-    // Restart the receiver so we can accept new transfers
-    setTimeout(() => {
-      try {
-        const ok = globalThis.startReceiver?.(TRANSFER_PORT);
-        if (ok) {
-          startProgressPolling();
-        }
-      } catch {}
-    }, 100);
+    try {
+      await NativeModules.SwiftShareJSI.openFile(savedPath);
+    } catch (e: any) {
+      Alert.alert('Could not open file', e?.message ?? 'Please try again.');
+    }
   };
 
   const connectToDevice = (device: DiscoveredDevice) => {
@@ -820,7 +969,7 @@ function App() {
     stopBroadcasting();
     setTransferMode('idle');
     setProgress(0);
-    setPickedFile(null);
+    setPickedFiles([]);
     stopProgressPolling();
 
     sendLock(sock, device.address, newSessionId, role);
@@ -844,11 +993,13 @@ function App() {
     setSessionId(null);
     setTransferMode('idle');
     setProgress(0);
-    setPickedFile(null);
+    setPickedFiles([]);
     setPickerError(null);
     setSentFiles([]);
     setReceivedFiles([]);
-    currentTransferIdRef.current = null;
+    sendQueueRef.current = [];
+    currentSendRef.current = null;
+    currentReceiveIdRef.current = null;
 
     try {
       cleanupLocalCopy();
@@ -874,7 +1025,7 @@ function App() {
         role={role}
         devices={devices}
         sessionPeer={sessionPeer}
-        pickedFile={pickedFile}
+        pickedFiles={pickedFiles}
         isPickingFile={isPickingFile}
         pickerError={pickerError}
         transferMode={transferMode}
@@ -886,8 +1037,14 @@ function App() {
         onSelectDevice={connectToDevice}
         onBack={terminateSession}
         onPickFile={pickFile}
-        onSendFile={sendFile}
+        onSendFiles={sendFiles}
+        onCancelPick={() => setPickedFiles([])}
+        onRemovePick={index =>
+          setPickedFiles(prev => prev.filter((_, i) => i !== index))
+        }
         onCancelTransfer={cancelOngoingTransfer}
+        onCancelAllSends={cancelAllSends}
+        onOpenFile={openReceivedFile}
         onTerminate={terminateSession}
       />
     </SafeAreaProvider>

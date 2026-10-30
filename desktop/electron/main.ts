@@ -19,10 +19,26 @@ let rxCurrentFileName = '';
 
 // Node.js TCP sender state
 let txSocket: net.Socket | null = null;
+let txStream: fs.ReadStream | null = null;
 let txBytesTransferred = 0;
 let txTotalBytes = 0;
 let txCurrentFileName = '';
 let txCurrentFileSize = 0;
+
+// Finished transfers, collected by JS on its progress poll so a file that
+// finishes between polls is never missed. Matches TransferEvent in transfer_engine.h.
+type TransferEvent = { incoming: boolean; fileName: string; fileSize: number; success: boolean; stoppedBySender?: boolean; savedPath?: string };
+let transferEvents: TransferEvent[] = [];
+// Incremented per transfer so an old socket can't reset a newer transfer's progress
+let rxSeq = 0;
+let txSeq = 0;
+const SOCKET_TIMEOUT_MS = 30000;
+// Sent by the receiver once the file is saved; see protocol.h. Node can't see
+// whether queued data was delivered, so without this byte a send counts as failed.
+const STATUS_OK = 0;
+const STATUS_ERROR = 1;
+// Queued data can take a while to drain over a slow link once sending finishes
+const ACK_TIMEOUT_MS = 120000;
 
 // Compute broadcast addresses for all active IPv4 network interfaces.
 // When the Mac is a hotspot, macOS creates a bridge interface (e.g. bridge100)
@@ -91,19 +107,16 @@ ipcMain.handle('getDeviceName', () => os.hostname().replace(/\.local$/i, ''));
 ipcMain.handle('pickDocument', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile']
+    properties: ['openFile', 'multiSelections']
   });
   if (result.canceled || result.filePaths.length === 0) return null;
-  
-  const fp = result.filePaths[0];
-  const stats = fs.statSync(fp);
-  
-  return {
+
+  return result.filePaths.map(fp => ({
     uri: 'file://' + fp,
     name: path.basename(fp),
-    size: stats.size,
+    size: fs.statSync(fp).size,
     path: fp
-  };
+  }));
 });
 
 // react-native-fs mock
@@ -225,6 +238,13 @@ ipcMain.handle('getLocalIP', () => {
 });
 
 // Helper to find a unique filename by appending (1), (2), etc.
+// The name comes from the sender: keep only the last path segment so it can't
+// point outside the SwiftShareX folder, and drop characters Windows can't save
+function sanitizeFileName(name: string): string {
+  const base = (name.split(/[\\/]/).pop() ?? '').replace(/[<>:"|?*\x00-\x1f]/g, '_');
+  return base === '' || base === '.' || base === '..' ? 'file' : base;
+}
+
 function getUniqueFilePath(dir: string, originalName: string): string {
   const filePath = path.join(dir, originalName);
   if (!fs.existsSync(filePath)) return filePath;
@@ -243,7 +263,7 @@ function getUniqueFilePath(dir: string, originalName: string): string {
 
 // Pure Node.js TCP receiver implementing the SWFT protocol.
 // Replaces C++ engine's startReceiver to avoid macOS BSD O_NONBLOCK/recv issues.
-ipcMain.on('engine:startReceiver', (event, port) => {
+ipcMain.on('engine:startReceiver', (event, port, peerIp) => {
   try {
     // Close any existing server
     if (rxServer) {
@@ -258,22 +278,56 @@ ipcMain.on('engine:startReceiver', (event, port) => {
     const server = net.createServer((sock) => {
       console.log(`[NodeRX] Connection from ${sock.remoteAddress}:${sock.remotePort}`);
 
+      // Only the paired device may send; anyone else on the network is refused
+      const remoteIp = (sock.remoteAddress ?? '').replace(/^::ffff:/, '');
+      if (remoteIp !== peerIp) {
+        console.error(`[NodeRX] Rejected connection from ${remoteIp} (paired peer is ${peerIp})`);
+        sock.destroy();
+        return;
+      }
+
       // We accumulate incoming bytes in a buffer and parse the SWFT protocol
       let buf = Buffer.alloc(0);
-      let phase: 'hello'|'meta'|'filename'|'data'|'done' = 'hello';
+      let phase: 'hello'|'meta'|'filename'|'data'|'failed'|'done' = 'hello';
       let fileSize = 0;
       let nameLen = 0;
       let chunkSize = 0;
       let filename = '';
       let fd: number = -1;
+      let outPath = '';
+      // Data goes to a .part file that only gets the real name once complete,
+      // so an interrupted transfer never looks like a finished file
+      let partPath = '';
       let written = 0;
       let chunkRemaining = 0;
+      let seq = -1;
+
+      // Without a timeout, a sender that vanishes (e.g. Wi-Fi drop) leaves us waiting forever
+      sock.setTimeout(SOCKET_TIMEOUT_MS, () => sock.destroy(new Error('timeout')));
 
       // Sizes (all little-endian, matching protocol.h)
       const HELLO_SIZE = 8;  // magic(4) + version(1) + mode(1) + reserved(2)
       const META_SIZE  = 16; // fileSize(8) + nameLen(2) + pad(2) + chunkSize(4)
       const RESUME_OFFSET_SIZE = 8;  // uint64
       const CHUNK_HDR_SIZE = 4; // uint32 length
+
+      // Tell the sender the file wasn't saved, then let 'close' clean up
+      const finishReceive = (success: boolean, stoppedBySender = false) => {
+        const savedPath = success ? outPath : undefined;
+        if (seq === rxSeq) {
+          rxBytesTransferred = 0;
+          rxTotalBytes = 0;
+          rxCurrentFileName = '';
+          rxCurrentFileSize = 0;
+        }
+        transferEvents.push({ incoming: true, fileName: filename, fileSize, success, stoppedBySender, savedPath });
+      };
+
+      let stoppedBySender = false;
+      const failReceive = () => {
+        phase = 'failed';
+        sock.end(Buffer.from([STATUS_ERROR]));
+      };
 
       const tryParse = () => {
         // Keep parsing as long as we have enough data for the current phase
@@ -302,11 +356,12 @@ ipcMain.on('engine:startReceiver', (event, port) => {
 
           } else if (phase === 'filename') {
             if (buf.length < nameLen) return;
-            filename = buf.slice(0, nameLen).toString('utf8');
+            filename = sanitizeFileName(buf.slice(0, nameLen).toString('utf8'));
             buf = buf.slice(nameLen);
 
             // Determine unique path to avoid overwriting
-            const outPath = getUniqueFilePath(downloadsDir, filename);
+            outPath = getUniqueFilePath(downloadsDir, filename);
+            partPath = `${outPath}.part`;
             const finalFilename = path.basename(outPath);
             
             console.log(`[NodeRX] Receiving: ${filename} (saved as ${finalFilename}) (${fileSize} bytes) → ${outPath}`);
@@ -317,12 +372,14 @@ ipcMain.on('engine:startReceiver', (event, port) => {
             rxTotalBytes = fileSize;
             rxBytesTransferred = 0;
             written = 0;
+            seq = ++rxSeq;
 
             // Open file for writing (create or truncate)
             try {
-              fd = fs.openSync(outPath, 'w');
+              fd = fs.openSync(partPath, 'w');
             } catch (e) {
-              console.error(`[NodeRX] Failed to open file: ${outPath}`, e);
+              console.error(`[NodeRX] Failed to open file: ${partPath}`, e);
+              partPath = '';
               sock.destroy();
               return;
             }
@@ -345,11 +402,27 @@ ipcMain.on('engine:startReceiver', (event, port) => {
 
               if (chunkLen === 0) {
                 // End-of-transfer marker
+                if (written !== fileSize) {
+                  // Sender stopped early (e.g. it cancelled)
+                  console.error(`[NodeRX] Incomplete: ${written} of ${fileSize} bytes`);
+                  stoppedBySender = true;
+                  failReceive();
+                  return;
+                }
+                try {
+                  // closeSync can report a deferred write error, so it counts towards success
+                  fs.closeSync(fd);
+                  fd = -1;
+                  fs.renameSync(partPath, outPath);
+                } catch (e) {
+                  console.error(`[NodeRX] Failed to save ${outPath}:`, e);
+                  failReceive();
+                  return;
+                }
                 console.log(`[NodeRX] Transfer complete: ${filename}`);
-                if (fd >= 0) { fs.closeSync(fd); fd = -1; }
-                rxBytesTransferred = rxTotalBytes; // Signal 100%
                 phase = 'done';
-                sock.end();
+                finishReceive(true);
+                sock.end(Buffer.from([STATUS_OK]));
                 return;
               }
               chunkRemaining = chunkLen;
@@ -368,14 +441,14 @@ ipcMain.on('engine:startReceiver', (event, port) => {
                 fs.writeSync(fd, chunk, 0, chunk.length, written);
               } catch (e) {
                 console.error(`[NodeRX] Write error:`, e);
-                sock.destroy();
+                failReceive();
                 return;
               }
             }
             written += avail;
             rxBytesTransferred = written;
 
-          } else if (phase === 'done') {
+          } else {
             return;
           }
         }
@@ -389,27 +462,21 @@ ipcMain.on('engine:startReceiver', (event, port) => {
       sock.on('end', () => {
         console.log(`[NodeRX] Connection closed (phase=${phase}, written=${written})`);
         if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
-        if (phase !== 'done') {
-          // Premature close
-          rxBytesTransferred = 0;
-          rxTotalBytes = 0;
-        }
-        // Reset state after a brief delay so JS can see completion
-        setTimeout(() => {
-          rxBytesTransferred = 0;
-          rxTotalBytes = 0;
-          rxCurrentFileName = '';
-          rxCurrentFileSize = 0;
-        }, 1500);
       });
 
       sock.on('error', (err) => {
         console.error(`[NodeRX] Socket error:`, err.message);
         if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
-        rxBytesTransferred = 0;
-        rxTotalBytes = 0;
-        rxCurrentFileName = '';
-        rxCurrentFileSize = 0;
+      });
+
+      sock.on('close', () => {
+        if (phase !== 'done' && partPath) {
+          if (fd >= 0) { try { fs.closeSync(fd); } catch {} fd = -1; }
+          try { fs.unlinkSync(partPath); } catch {}
+        }
+        if (phase === 'data' || phase === 'failed') {
+          finishReceive(false, stoppedBySender);
+        }
       });
     });
 
@@ -444,6 +511,10 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     const client = new net.Socket();
     txSocket = client;
+    const seq = ++txSeq;
+    const sentName = txCurrentFileName;
+    const sentSize = stats.size;
+    client.setTimeout(SOCKET_TIMEOUT_MS, () => client.destroy(new Error('timeout')));
 
     client.connect(port, ip, () => {
       console.log(`[NodeTX] Connected to ${ip}:${port}`);
@@ -470,10 +541,13 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
       console.log(`[NodeTX] Sent metadata. Waiting for resume offset...`);
     });
 
-    let phase: 'resume' | 'data' | 'done' = 'resume';
+    let phase: 'resume' | 'data' | 'awaitingAck' | 'done' = 'resume';
+    let receiverStatus: number | null = null;
 
     client.on('data', (data: Buffer) => {
-      if (phase === 'resume') {
+      if (phase === 'awaitingAck' && data.length > 0) {
+        receiverStatus = data[0];
+      } else if (phase === 'resume') {
         if (data.length < 8) return;
         const resumeOffset = Number(data.readBigUInt64LE(0));
         console.log(`[NodeTX] Received resume offset: ${resumeOffset}`);
@@ -482,6 +556,7 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
         // Start streaming file data
         const stream = fs.createReadStream(filePath, { start: resumeOffset, highWaterMark: 256 * 1024 });
+        txStream = stream;
 
         stream.on('data', (chunk: Buffer) => {
           // Pause stream until chunk is sent (backpressure)
@@ -508,10 +583,11 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
           const endHdr = Buffer.alloc(4, 0);
           if (!client.destroyed) {
             client.write(endHdr, () => {
-              console.log(`[NodeTX] Transfer complete: ${txCurrentFileName}`);
-              phase = 'done';
-              // Keep socket open for a moment? No, protocol says done.
-              setTimeout(() => client.destroy(), 500);
+              // Written only means queued; the receiver confirms delivery
+              console.log(`[NodeTX] All data queued: ${txCurrentFileName}`);
+              phase = 'awaitingAck';
+              client.setTimeout(ACK_TIMEOUT_MS);
+              client.end();
             });
           }
         });
@@ -525,21 +601,21 @@ ipcMain.on('engine:startSender', (event, filePath, ip, port) => {
 
     client.on('close', () => {
       console.log(`[NodeTX] Socket closed.`);
-      txSocket = null;
-      // Reset state after a brief delay
-      setTimeout(() => {
-        if (!txSocket) {
-          txBytesTransferred = 0;
-          txTotalBytes = 0;
-          txCurrentFileName = '';
-          txCurrentFileSize = 0;
-        }
-      }, 1500);
+      if (seq === txSeq) {
+        txSocket = null;
+        txStream = null;
+        txBytesTransferred = 0;
+        txTotalBytes = 0;
+        txCurrentFileName = '';
+        txCurrentFileSize = 0;
+      }
+      const delivered = phase === 'awaitingAck' && receiverStatus === STATUS_OK;
+      if (delivered) console.log(`[NodeTX] Transfer complete: ${sentName}`);
+      transferEvents.push({ incoming: false, fileName: sentName, fileSize: sentSize, success: delivered });
     });
 
     client.on('error', (err) => {
       console.error(`[NodeTX] Socket error:`, err.message);
-      txSocket = null;
     });
 
     event.returnValue = true;
@@ -556,6 +632,29 @@ ipcMain.handle('openDownloadsFolder', async () => {
     fs.mkdirSync(folderPath, { recursive: true });
   }
   return shell.openPath(folderPath);
+});
+
+// Files come from another device, so anything that would run when opened is
+// only shown in its folder
+const RUNNABLE_FILE = /\.(app|applescript|bat|cmd|com|command|cpl|deb|desktop|dmg|exe|hta|inf|jar|js|jse|lnk|msc|msi|pif|pkg|ps1|py|reg|rpm|scpt|scr|sh|terminal|url|vbe|vbs|webloc|workflow|ws|wsf|wsh|appimage)$/i;
+
+ipcMain.handle('openReceivedFile', async (_, filePath: string) => {
+  const folderPath = path.join(app.getPath('downloads'), 'SwiftShareX');
+  const showProblem = (message: string) => {
+    if (mainWindow) dialog.showMessageBox(mainWindow, { type: 'warning', message });
+  };
+
+  if (path.dirname(filePath) !== folderPath || !fs.existsSync(filePath)) {
+    showProblem('This file is no longer in the SwiftShareX folder.');
+    return;
+  }
+  if (RUNNABLE_FILE.test(filePath)) {
+    shell.showItemInFolder(filePath);
+    return;
+  }
+
+  const error = await shell.openPath(filePath);
+  if (error) showProblem(`Could not open this file: ${error}`);
 });
 
 // Progress: check both C++ sender progress AND Node.js (receiver AND sender) progress
@@ -576,6 +675,11 @@ ipcMain.on('engine:getProgress', (event) => {
   catch { event.returnValue = 0; }
 });
 
+ipcMain.on('engine:takeTransferEvents', (event) => {
+  event.returnValue = transferEvents;
+  transferEvents = [];
+});
+
 ipcMain.on('engine:cancelTransfer', (event) => {
   // Cancel Node.js receiver
   if (rxServer) { try { rxServer.close(); } catch {} rxServer = null; }
@@ -587,6 +691,18 @@ ipcMain.on('engine:cancelTransfer', (event) => {
   txBytesTransferred = 0; txTotalBytes = 0;
   txCurrentFileName = ''; txCurrentFileSize = 0;
 
+  event.returnValue = null;
+});
+
+// Stops only the outgoing file; the receiver keeps running
+ipcMain.on('engine:cancelSend', (event) => {
+  if (txStream && txSocket) {
+    // Chunks are written whole, so the END marker lands on a chunk boundary
+    txStream.destroy();
+    txSocket.end(Buffer.alloc(4, 0));
+  } else if (txSocket) {
+    txSocket.destroy();
+  }
   event.returnValue = null;
 });
 
