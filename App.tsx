@@ -20,6 +20,14 @@ declare global {
   // Only accepts connections from peerIp
   var startReceiver: (port: number, peerIp: string) => boolean;
   var startSender: (path: string, ip: string, port: number) => boolean;
+  // Whether a picked file can be read in place, without a local copy
+  var canSendDirectly: (uri: string) => boolean;
+  var startSenderDirect: (
+    uri: string,
+    name: string,
+    ip: string,
+    port: number,
+  ) => boolean;
   var getProgress: () => number;
   var cancelTransfer: () => void;
   var getCurrentFileName: () => string;
@@ -682,6 +690,17 @@ function App() {
         allowMultiSelection: false,
       });
 
+      // Sending in place avoids waiting for a copy and doubling the storage used
+      if (globalThis.canSendDirectly?.(res.uri)) {
+        setPickedFile({
+          name: res.name ?? 'file',
+          uri: res.uri,
+          size: res.size,
+          path: '',
+        });
+        return;
+      }
+
       const copyResults = await DocumentPicker.keepLocalCopy({
         files: [
           {
@@ -715,8 +734,12 @@ function App() {
       });
     } catch (err: any) {
       // Silent cancel
-      // @ts-ignore
-      if (DocumentPicker?.isCancel?.(err)) return;
+      if (
+        DocumentPicker.isErrorWithCode(err) &&
+        err.code === DocumentPicker.errorCodes.OPERATION_CANCELED
+      ) {
+        return;
+      }
 
       setPickerError('Failed to pick file. Try again.');
     } finally {
@@ -789,19 +812,21 @@ function App() {
 
   const sendFile = () => {
     if (!sessionPeer || !pickedFile) return;
-    const path = pickedFile.path;
-    if (!path) {
-      setPickerError('File is not accessible locally. Pick again.');
-      return;
-    }
 
     clearSendStartTimeout();
 
-    const ok = globalThis.startSender?.(
-      path,
-      sessionPeer.address,
-      TRANSFER_PORT,
-    );
+    const ok = pickedFile.path
+      ? globalThis.startSender?.(
+          pickedFile.path,
+          sessionPeer.address,
+          TRANSFER_PORT,
+        )
+      : globalThis.startSenderDirect?.(
+          pickedFile.uri,
+          pickedFile.name,
+          sessionPeer.address,
+          TRANSFER_PORT,
+        );
     if (!ok) {
       handleSendFailure('Could not start the transfer. Please try again.');
       return;

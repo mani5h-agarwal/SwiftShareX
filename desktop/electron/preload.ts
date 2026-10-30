@@ -8,6 +8,13 @@ contextBridge.exposeInMainWorld('startReceiver', (port: number, peerIp: string):
 contextBridge.exposeInMainWorld('startSender', (filePath: string, ip: string, port: number): boolean =>
   ipcRenderer.sendSync('engine:startSender', filePath, ip, port)
 );
+// Desktop files are plain paths, so they can always be read in place
+contextBridge.exposeInMainWorld('canSendDirectly', (uri: string): boolean =>
+  uri.startsWith('file://')
+);
+contextBridge.exposeInMainWorld('startSenderDirect', (uri: string, _name: string, ip: string, port: number): boolean =>
+  ipcRenderer.sendSync('engine:startSender', uri.slice('file://'.length), ip, port)
+);
 contextBridge.exposeInMainWorld('getProgress', (): number =>
   ipcRenderer.sendSync('engine:getProgress')
 );

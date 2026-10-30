@@ -41,6 +41,10 @@ export const keepLocalCopy = async (opts: { files: Array<{ uri: string; fileName
     return results;
 };
 
+export const errorCodes = { OPERATION_CANCELED: 'DOCUMENT_PICKER_CANCELED' };
+
+export const isErrorWithCode = (err: any): boolean => typeof err?.code === 'string';
+
 export const isCancel = (err: any): boolean => {
     return (
         err?.code === 'DOCUMENT_PICKER_CANCELED' ||
@@ -64,5 +68,7 @@ export default {
     pickSingle,
     keepLocalCopy,
     isCancel,
+    errorCodes,
+    isErrorWithCode,
     types,
 };

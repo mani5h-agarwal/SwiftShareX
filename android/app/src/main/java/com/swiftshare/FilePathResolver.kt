@@ -1,6 +1,7 @@
 package com.swiftshare
 
 import android.content.Context
+import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import java.io.File
@@ -31,6 +32,17 @@ object FilePathResolver {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get file path", e)
             null
+        }
+    }
+
+    // Hands the caller ownership of the returned file descriptor; -1 on failure
+    @JvmStatic // JNI entrypoint
+    fun openForRead(context: Context, uri: String): Int {
+        return try {
+            context.contentResolver.openFileDescriptor(Uri.parse(uri), "r")?.detachFd() ?: -1
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open $uri", e)
+            -1
         }
     }
 

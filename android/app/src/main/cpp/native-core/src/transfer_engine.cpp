@@ -5,7 +5,10 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
+#include <linux/sockios.h>
 #include <sys/stat.h>
+#include <algorithm>
 #include <cstring>
 #include <vector>
 #include <thread>
@@ -19,6 +22,19 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 using namespace swiftshare;
+
+namespace
+{
+    // Give up if the receiver makes no progress for this long
+    constexpr int ACK_STALL_TIMEOUT_SECONDS = 30;
+
+    // Bytes the kernel has accepted but the receiver hasn't acknowledged
+    uint64_t unacknowledgedBytes(int sock)
+    {
+        int queued = 0;
+        return ioctl(sock, SIOCOUTQ, &queued) == 0 ? queued : 0;
+    }
+}
 
 TransferEngine::TransferEngine()
     : bytesTransferred_(0),
@@ -287,9 +303,15 @@ void TransferEngine::receiverThread(uint16_t port)
                 bytesTransferred_ += hdr.length;
         }
 
+        // Consume the sender's end marker so closing doesn't reset the connection
+        if (bytesTransferred_ == totalBytes_)
+        {
+            DataChunkHeader endHdr{};
+            recv(client, &endHdr, sizeof(endHdr), MSG_WAITALL);
+        }
+
         // close() can report a deferred write error, so it counts towards success
         bool closeFailed = close(fd) != 0;
-        close(client);
 
         bool complete = !cancelled_ && !writeFailed && !closeFailed &&
                         bytesTransferred_ == totalBytes_;
@@ -300,6 +322,11 @@ void TransferEngine::receiverThread(uint16_t port)
         }
         if (!complete)
             unlink(partPath.c_str());
+
+        // Only now is the file safe, so only now may the sender report success
+        uint8_t status = complete ? STATUS_OK : STATUS_ERROR;
+        send(client, &status, sizeof(status), MSG_NOSIGNAL);
+        close(client);
 
         if (complete)
         {
@@ -349,19 +376,34 @@ bool TransferEngine::startSender(const std::string &filePath,
                                  const std::string &ip,
                                  uint16_t port)
 {
+    int fd = open(filePath.c_str(), O_RDONLY);
+    if (fd < 0)
+    {
+        LOGE("Failed to open file: %s", filePath.c_str());
+    }
+
+    return startSender(fd, filePath.substr(filePath.find_last_of('/') + 1), ip, port);
+}
+
+bool TransferEngine::startSender(int fd,
+                                 const std::string &filename,
+                                 const std::string &ip,
+                                 uint16_t port)
+{
     cancelled_ = false;
     bytesTransferred_ = 0;
     totalBytes_ = 0;
     state_ = TransferState::Active;
 
     std::thread([=]()
-                { this->senderThread(filePath, ip, port); })
+                { this->senderThread(fd, filename, ip, port); })
         .detach();
 
     return true;
 }
 
-void TransferEngine::senderThread(const std::string &filePath,
+void TransferEngine::senderThread(int fd,
+                                  const std::string &filename,
                                   const std::string &ip,
                                   uint16_t port)
 {
@@ -375,11 +417,9 @@ void TransferEngine::senderThread(const std::string &filePath,
         state_ = TransferState::Failed;
     };
 
-    // 1️⃣ Open file
-    int fd = open(filePath.c_str(), O_RDONLY);
+    // 1️⃣ Check file
     if (fd < 0)
     {
-        LOGE("Failed to open file: %s", filePath.c_str());
         failSend();
         return;
     }
@@ -388,10 +428,6 @@ void TransferEngine::senderThread(const std::string &filePath,
     fstat(fd, &st);
     uint64_t fileSize = st.st_size;
     totalBytes_ = fileSize;
-
-    // Extract filename
-    std::string filename =
-        filePath.substr(filePath.find_last_of('/') + 1);
 
     // 2️⃣ Create socket
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -498,6 +534,7 @@ void TransferEngine::senderThread(const std::string &filePath,
 
     lseek(fd, resumeOffset, SEEK_SET);
     bytesTransferred_ = resumeOffset;
+    uint64_t sentBytes = resumeOffset;
 
     std::vector<char> buffer(meta.chunkSize);
 
@@ -533,7 +570,9 @@ void TransferEngine::senderThread(const std::string &filePath,
             }
             sent += s;
         }
-        bytesTransferred_ += n;
+        // send() only queues data, so don't count what hasn't been delivered yet
+        sentBytes += n;
+        bytesTransferred_ = sentBytes - std::min(sentBytes, unacknowledgedBytes(sock));
     }
 
     // 8️⃣ Signal completion with zero-length header
@@ -545,10 +584,12 @@ void TransferEngine::senderThread(const std::string &filePath,
         LOGE("Failed to send END marker");
     }
 
+    bool delivered = endSent && sentBytes == fileSize && waitForReceiver(sock, fileSize);
+
     close(sock);
     close(fd);
 
-    if (cancelled_ || !endSent || bytesTransferred_ != totalBytes_)
+    if (cancelled_ || !delivered)
     {
         LOGE("Send incomplete: %llu of %llu bytes",
              (unsigned long long)bytesTransferred_.load(), (unsigned long long)totalBytes_.load());
@@ -563,6 +604,50 @@ void TransferEngine::senderThread(const std::string &filePath,
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     bytesTransferred_ = 0;
     totalBytes_ = 0;
+}
+
+// Waits for the receiver to confirm the file, keeping progress honest meanwhile
+bool TransferEngine::waitForReceiver(int sock, uint64_t fileSize)
+{
+    struct timeval pollInterval;
+    pollInterval.tv_sec = 1;
+    pollInterval.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &pollInterval, sizeof(pollInterval));
+
+    uint64_t lowestQueued = UINT64_MAX;
+    int stalledSeconds = 0;
+    while (!cancelled_)
+    {
+        uint8_t status = STATUS_ERROR;
+        ssize_t r = recv(sock, &status, sizeof(status), 0);
+        if (r == 1)
+        {
+            if (status != STATUS_OK)
+                LOGE("Receiver could not save the file");
+            bytesTransferred_ = fileSize;
+            return status == STATUS_OK;
+        }
+        if (r == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+        {
+            // A receiver without status support closes when it has the whole file
+            bytesTransferred_ = fileSize;
+            return true;
+        }
+
+        uint64_t queued = unacknowledgedBytes(sock);
+        bytesTransferred_ = fileSize - std::min(fileSize, queued);
+        if (queued < lowestQueued)
+        {
+            lowestQueued = queued;
+            stalledSeconds = 0;
+        }
+        else if (++stalledSeconds >= ACK_STALL_TIMEOUT_SECONDS)
+        {
+            LOGE("Timed out waiting for receiver");
+            return false;
+        }
+    }
+    return false;
 }
 
 std::string TransferEngine::getCurrentFileName() const

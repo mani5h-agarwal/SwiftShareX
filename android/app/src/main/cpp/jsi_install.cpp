@@ -11,9 +11,56 @@ static jobject g_contextRef = nullptr;
 static jclass g_resolverClass = nullptr; // Cache the class reference
 
 #include <thread>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <android/log.h>
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "SwiftShare", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "SwiftShare", __VA_ARGS__)
+
+// Opens a content:// URI for reading; returns a file descriptor or -1
+static int openContentUri(const std::string &uri)
+{
+    JNIEnv *env = nullptr;
+    bool attached = false;
+
+    jint result = g_jvm ? g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) : JNI_ERR;
+    if (result == JNI_EDETACHED)
+    {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != 0)
+        {
+            return -1;
+        }
+        attached = true;
+    }
+    else if (result != JNI_OK)
+    {
+        return -1;
+    }
+
+    int fd = -1;
+    jmethodID method = env->GetStaticMethodID(
+        g_resolverClass,
+        "openForRead",
+        "(Landroid/content/Context;Ljava/lang/String;)I");
+    if (method)
+    {
+        jstring jUri = env->NewStringUTF(uri.c_str());
+        fd = env->CallStaticIntMethod(g_resolverClass, method, g_contextRef, jUri);
+        env->DeleteLocalRef(jUri);
+    }
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        fd = -1;
+    }
+
+    if (attached)
+    {
+        g_jvm->DetachCurrentThread();
+    }
+    return fd;
+}
 
 void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
 {
@@ -208,6 +255,72 @@ void installJSI(jsi::Runtime &runtime, JNIEnv *env, jobject moduleInstance)
                 LOGI("Starting sender: %s -> %s:%d", path.c_str(), ip.c_str(), port);
                 bool ok = engine->startSender(path, ip, port);
                 return jsi::Value(ok);
+            }));
+
+    runtime.global().setProperty(
+        runtime,
+        "canSendDirectly",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "canSendDirectly"),
+            1,
+            [](jsi::Runtime &rt,
+               const jsi::Value &,
+               const jsi::Value *args,
+               size_t count) -> jsi::Value
+            {
+                if (count < 1 || !args[0].isString())
+                {
+                    return jsi::Value(false);
+                }
+
+                int fd = openContentUri(args[0].asString(rt).utf8(rt));
+                if (fd < 0)
+                {
+                    return jsi::Value(false);
+                }
+
+                // Streams (e.g. cloud documents) have no known size, so they need a local copy
+                struct stat st{};
+                bool regular = fstat(fd, &st) == 0 && S_ISREG(st.st_mode);
+                close(fd);
+                return jsi::Value(regular);
+            }));
+
+    runtime.global().setProperty(
+        runtime,
+        "startSenderDirect",
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "startSenderDirect"),
+            4,
+            [](jsi::Runtime &rt,
+               const jsi::Value &,
+               const jsi::Value *args,
+               size_t count) -> jsi::Value
+            {
+                if (count < 4 ||
+                    !args[0].isString() ||
+                    !args[1].isString() ||
+                    !args[2].isString() ||
+                    !args[3].isNumber())
+                {
+                    LOGE("startSenderDirect: invalid arguments");
+                    return jsi::Value(false);
+                }
+
+                if (!engine)
+                {
+                    engine = std::make_unique<TransferEngine>();
+                }
+
+                int fd = openContentUri(args[0].asString(rt).utf8(rt));
+                std::string name = args[1].asString(rt).utf8(rt);
+                std::string ip = args[2].asString(rt).utf8(rt);
+                uint16_t port = static_cast<uint16_t>(args[3].asNumber());
+
+                LOGI("Starting direct sender: %s -> %s:%d", name.c_str(), ip.c_str(), port);
+                return jsi::Value(engine->startSender(fd, name, ip, port));
             }));
 
     runtime.global().setProperty(

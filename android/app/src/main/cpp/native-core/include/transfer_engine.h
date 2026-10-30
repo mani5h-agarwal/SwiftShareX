@@ -33,6 +33,12 @@ namespace swiftshare
                          const std::string &ip,
                          uint16_t port);
 
+        // Sender reading from an already open file; takes ownership of fd
+        bool startSender(int fd,
+                         const std::string &filename,
+                         const std::string &ip,
+                         uint16_t port);
+
         double getProgress() const;
         TransferState getState() const;
         void cancel();
@@ -41,9 +47,12 @@ namespace swiftshare
 
     private:
         void receiverThread(uint16_t port);
-        void senderThread(const std::string &filePath,
+        void senderThread(int fd,
+                          const std::string &filename,
                           const std::string &ip,
                           uint16_t port);
+
+        bool waitForReceiver(int sock, uint64_t fileSize);
 
         std::atomic<uint64_t> bytesTransferred_;
         std::atomic<uint64_t> totalBytes_;
