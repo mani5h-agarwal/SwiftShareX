@@ -17,6 +17,10 @@
       window.process.platform = window.process.platform || 'darwin';
     </script>
     <style>
+      /* The app never shows scrollbars */
+      * { scrollbar-width: none; }
+      ::-webkit-scrollbar { display: none; }
+
       /* Base styles to replicate React Native structure */
       html, body, #root {
         height: 100%;

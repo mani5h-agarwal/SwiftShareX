@@ -55,6 +55,8 @@ export default defineConfig({
     emptyOutDir: true
   },
   resolve: {
+    // Production builds ignore optimizeDeps, so web files need picking here too
+    extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'],
     alias: [
       { find: 'react-native/Libraries/Utilities/codegenNativeComponent', replacement: path.resolve(__dirname, './src/mocks/codegen.ts') },
       { find: 'react-native/Libraries/ReactNative/AppContainer', replacement: path.resolve(__dirname, './src/mocks/appcontainer.ts') },
