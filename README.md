@@ -47,11 +47,11 @@ Get the latest version of SwiftShareX for all your devices:
 - **🚀 Ultra-fast Transfers**: Optimized TCP engine hitting up to **80MB/s** on 5GHz Wi-Fi.
 - **📂 No File Size Limit**: Send and receive multi-GB files without compression or limits.
 - **🔌 100% Offline**: Works over local networks or mobile hotspots—no mobile data used.
-- **🔒 Private & Secure**: Zero data collection, no cloud intermediary, direct device-to-device.
+- **🔒 Private**: Zero data collection, no cloud intermediary, direct device-to-device.
 - **⚡ C++ Core**: All transfer logic is written in native C++ for maximum throughput.
 - **📱 Modern UI**: A clean, animated interface built for mobile and desktop.
 - **🔍 Instant Discovery**: Find nearby devices automatically using UDP broadcasts.
-- **🛡️ End-to-End**: Your files never leave your local network.
+- **🛡️ Local Only**: Your files never leave your local network.
 
 ---
 
