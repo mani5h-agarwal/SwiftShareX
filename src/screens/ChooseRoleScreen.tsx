@@ -100,7 +100,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>SwiftShareX</Text>
-        <Text style={styles.tagline}>Fast. Simple. Secure.</Text>
+        <Text style={styles.tagline}>Fast. Simple. Direct.</Text>
       </View>
 
       {/* Main Content */}
@@ -129,7 +129,7 @@ const ChooseRoleScreen: React.FC<Props> = ({ onChoose }) => {
       <View style={styles.footer}>
         <View style={styles.featureRow}>
           <View style={styles.featureDot} />
-          <Text style={styles.featureText}>End-to-end encrypted</Text>
+          <Text style={styles.featureText}>Direct device-to-device</Text>
         </View>
         <View style={styles.featureRow}>
           <View style={styles.featureDot} />
