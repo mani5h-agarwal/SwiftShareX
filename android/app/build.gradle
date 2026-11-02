@@ -85,7 +85,7 @@ android {
         applicationId "com.swiftshare"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
+        versionCode 8
         versionName "2.2.0"
         // Disable cleartext by default; override via manifest placeholders if needed
         manifestPlaceholders = [usesCleartextTraffic: false]
